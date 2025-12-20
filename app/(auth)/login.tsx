@@ -8,7 +8,6 @@ import { View, Text } from "react-native";
 import { Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/ui";
-import { testFirebaseConnection } from "../../config/firebase-test";
 
 export default function LoginScreen() {
 
