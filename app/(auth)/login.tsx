@@ -3,13 +3,15 @@
  * TODO: Implémenter le formulaire complet
  */
 
-import React from "react";
+import React, { useEffect } from "react";
 import { View, Text } from "react-native";
 import { Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/ui";
+import { testFirebaseConnection } from "../../config/firebase-test";
 
 export default function LoginScreen() {
+
   return (
     <SafeAreaView className="flex-1 bg-pink-50">
       <View className="flex-1 px-6 justify-center">
