@@ -35,9 +35,6 @@ export type ChallengeType = "audio" | "video" | "photo" | "texte";
 /** Type de message dans le chat */
 export type MessageType = "text" | "photo" | "video" | "audio";
 
-/** Statut d'un couple */
-export type CoupleStatus = "pending" | "active" | "unlinked";
-
 /** Langue de l'application */
 export type Language = "fr" | "en";
 
@@ -132,8 +129,8 @@ export const MAX_FREE_GAMES_PER_DAY = 3;
 /** Durée d'expiration des médias (en minutes) */
 export const MEDIA_EXPIRATION_MINUTES = 10;
 
-/** Durée d'expiration du code d'invitation (en heures) */
-export const INVITE_CODE_EXPIRATION_HOURS = 24;
+/** Durée d'expiration du code de session (en heures) */
+export const SESSION_CODE_EXPIRATION_HOURS = 24;
 
 // ============================================================
 // NIVEAUX D'INTENSITÉ
@@ -227,7 +224,7 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
 
 /**
  * Document utilisateur Firestore
- * Chemin: /users/{odfsdfhdjsud}
+ * Chemin: /users/{userId}
  */
 export interface User {
   /** ID Firestore (= Firebase Auth UID) */
@@ -238,10 +235,6 @@ export interface User {
   displayName: string;
   gender: Gender;
   dateOfBirth: Timestamp;
-
-  // Couple
-  coupleId: string | null;
-  partnerNickname: string | null;
 
   // Premium
   premium: boolean;
@@ -266,38 +259,6 @@ export interface CreateUserData {
   displayName: string;
   gender: Gender;
   dateOfBirth: Date;
-}
-
-// ============================================================
-// COUPLE
-// ============================================================
-
-/**
- * Document couple Firestore
- * Chemin: /couples/{coupleId}
- */
-export interface Couple {
-  /** ID Firestore */
-  id: string;
-
-  // Partenaires
-  user1Id: string;
-  user2Id: string | null;
-
-  // Code d'invitation
-  inviteCode: string;
-  inviteCodeExpiresAt: Timestamp;
-
-  // État
-  status: CoupleStatus;
-
-  // Premium combiné
-  bothPremium: boolean;
-
-  // Timestamps
-  createdAt: Timestamp;
-  linkedAt: Timestamp | null;
-  unlinkedAt: Timestamp | null;
 }
 
 // ============================================================
@@ -504,7 +465,6 @@ export type RootStackParamList = {
   "(main)/home": undefined;
   "(main)/profile": undefined;
   "(main)/preferences": undefined;
-  "(main)/couple": undefined;
   "(main)/create-session": undefined;
   "(main)/join-session": undefined;
   "(main)/waiting-room": { sessionCode: string };

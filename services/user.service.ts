@@ -20,7 +20,6 @@ import {
   PremiumPlan,
   ApiResponse,
   Gender,
-  UserPreferences,
   DEFAULT_USER_PREFERENCES,
 } from "../types";
 
@@ -69,9 +68,6 @@ export const userService = {
         displayName: data.displayName,
         gender: data.gender,
         dateOfBirth: toTimestamp(data.dateOfBirth),
-        // Couple (null par défaut)
-        coupleId: null,
-        partnerNickname: null,
         // Premium
         premium: false,
         premiumUntil: null,

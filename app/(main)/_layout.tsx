@@ -1,16 +1,21 @@
 /**
  * Layout pour les écrans principaux
  *
- * Redirige vers (auth)/login si l'utilisateur n'est pas connecté
+ * - Redirige vers (auth)/login si l'utilisateur n'est pas connecté
+ * - Initialise les notifications push
  */
 
 import { useEffect } from "react";
 import { Stack, router } from "expo-router";
 import { useAuthStore } from "../../stores/authStore";
+import { useNotifications } from "../../hooks/useNotifications";
 
 export default function MainLayout() {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const isInitialized = useAuthStore((state) => state.isInitialized);
+
+  // Initialiser les notifications push
+  useNotifications();
 
   useEffect(() => {
     // Rediriger si non connecté
@@ -62,6 +67,12 @@ export default function MainLayout() {
         name="profile"
         options={{
           title: "Profil",
+        }}
+      />
+      <Stack.Screen
+        name="premium"
+        options={{
+          title: "Premium",
         }}
       />
     </Stack>

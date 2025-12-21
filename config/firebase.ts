@@ -74,7 +74,6 @@ export const arrayRemove = (...elements: any[]) => firestore.FieldValue.arrayRem
 
 export const usersCollection = () => firestore().collection("users");
 export const sessionsCollection = () => firestore().collection("sessions");
-export const couplesCollection = () => firestore().collection("couples");
 
 // ============================================================
 // HELPERS STORAGE
