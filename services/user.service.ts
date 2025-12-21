@@ -120,7 +120,8 @@ export const userService = {
     try {
       const doc = await usersCollection().doc(uid).get();
 
-      if (!doc.exists) {
+      // FIX: exists() est maintenant une méthode
+      if (!doc.exists()) {
         return {
           success: false,
           error: "Profil utilisateur introuvable",
@@ -231,7 +232,8 @@ export const userService = {
       .doc(uid)
       .onSnapshot(
         (doc) => {
-          if (doc.exists) {
+          // FIX: exists() est maintenant une méthode
+          if (doc.exists()) {
             const userData = {
               id: doc.id,
               ...doc.data(),
@@ -527,7 +529,8 @@ export const userService = {
 
       return {
         success: true,
-        data: doc.exists,
+        // FIX: exists() est maintenant une méthode
+        data: doc.exists(),
       };
     } catch (error: any) {
       console.error("[UserService] User exists check error:", error);

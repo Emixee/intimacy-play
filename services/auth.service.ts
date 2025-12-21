@@ -347,7 +347,8 @@ export const authService = {
     try {
       const doc = await usersCollection().doc(uid).get();
 
-      if (!doc.exists) {
+      // FIX: exists() est maintenant une méthode
+      if (!doc.exists()) {
         return {
           success: false,
           error: "Profil utilisateur introuvable",
@@ -403,7 +404,8 @@ export const authService = {
       .doc(uid)
       .onSnapshot(
         (doc) => {
-          if (doc.exists) {
+          // FIX: exists() est maintenant une méthode
+          if (doc.exists()) {
             const userData: User = {
               id: doc.id,
               ...doc.data(),

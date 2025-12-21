@@ -96,7 +96,8 @@ const isSessionExpired = (createdAt: FirebaseFirestoreTypes.Timestamp): boolean 
 const checkCodeExists = async (normalizedCode: string): Promise<boolean> => {
   try {
     const doc = await sessionsCollection().doc(normalizedCode).get();
-    return doc.exists;
+    // FIX: exists() est maintenant une méthode
+    return doc.exists();
   } catch (error) {
     console.error("[SessionService] Error checking code:", error);
     return false;
@@ -222,7 +223,8 @@ export const sessionService = {
       const sessionRef = sessionsCollection().doc(normalizedCode);
       const sessionDoc = await sessionRef.get();
 
-      if (!sessionDoc.exists) {
+      // FIX: exists() est maintenant une méthode
+      if (!sessionDoc.exists()) {
         return {
           success: false,
           error: getSessionErrorMessage("SESSION_NOT_FOUND"),
@@ -303,7 +305,8 @@ export const sessionService = {
     try {
       const sessionDoc = await sessionsCollection().doc(normalizedCode).get();
 
-      if (!sessionDoc.exists) {
+      // FIX: exists() est maintenant une méthode
+      if (!sessionDoc.exists()) {
         return {
           success: false,
           error: getSessionErrorMessage("SESSION_NOT_FOUND"),
@@ -356,7 +359,8 @@ export const sessionService = {
       .doc(normalizedCode)
       .onSnapshot(
         (doc) => {
-          if (doc.exists) {
+          // FIX: exists() est maintenant une méthode
+          if (doc.exists()) {
             const session: Session = {
               id: doc.id,
               ...doc.data(),
@@ -421,7 +425,8 @@ export const sessionService = {
       const sessionRef = sessionsCollection().doc(normalizedCode);
       const sessionDoc = await sessionRef.get();
 
-      if (!sessionDoc.exists) {
+      // FIX: exists() est maintenant une méthode
+      if (!sessionDoc.exists()) {
         return {
           success: false,
           error: getSessionErrorMessage("SESSION_NOT_FOUND"),
@@ -530,7 +535,7 @@ export const sessionService = {
     sessionCode: string,
     challengeIndex: number,
     newChallenge: SessionChallenge,
-    userId: string
+    odfsdfhdjsud: string
   ): Promise<ApiResponse> => {
     const normalizedCode = normalizeCode(sessionCode);
 
@@ -538,7 +543,8 @@ export const sessionService = {
       const sessionRef = sessionsCollection().doc(normalizedCode);
       const sessionDoc = await sessionRef.get();
 
-      if (!sessionDoc.exists) {
+      // FIX: exists() est maintenant une méthode
+      if (!sessionDoc.exists()) {
         return {
           success: false,
           error: getSessionErrorMessage("SESSION_NOT_FOUND"),
@@ -555,7 +561,7 @@ export const sessionService = {
       }
 
       // Déterminer le rôle du joueur
-      const userRole = getUserRoleInSession(session, userId);
+      const userRole = getUserRoleInSession(session, odfsdfhdjsud);
       if (!userRole) {
         return {
           success: false,
@@ -605,7 +611,8 @@ export const sessionService = {
       const sessionRef = sessionsCollection().doc(normalizedCode);
       const sessionDoc = await sessionRef.get();
 
-      if (!sessionDoc.exists) {
+      // FIX: exists() est maintenant une méthode
+      if (!sessionDoc.exists()) {
         return {
           success: false,
           error: getSessionErrorMessage("SESSION_NOT_FOUND"),
@@ -651,7 +658,8 @@ export const sessionService = {
       const sessionRef = sessionsCollection().doc(normalizedCode);
       const sessionDoc = await sessionRef.get();
 
-      if (!sessionDoc.exists) {
+      // FIX: exists() est maintenant une méthode
+      if (!sessionDoc.exists()) {
         return {
           success: false,
           error: getSessionErrorMessage("SESSION_NOT_FOUND"),
