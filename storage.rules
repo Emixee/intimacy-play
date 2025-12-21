@@ -1,0 +1,96 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // ============================================================
+    // FONCTIONS UTILITAIRES
+    // ============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isValidFileSize() {
+      return request.resource.size < 10 * 1024 * 1024; // Max 10 MB
+    }
+    
+    function isValidMediaType() {
+      return request.resource.contentType.matches('image/.*') ||
+             request.resource.contentType.matches('video/.*') ||
+             request.resource.contentType.matches('audio/.*');
+    }
+    
+    function isImageType() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    // ============================================================
+    // DOSSIER: sessions/{sessionCode}/media/*
+    // Médias éphémères envoyés pendant les défis
+    // ============================================================
+    
+    match /sessions/{sessionCode}/media/{fileName} {
+      
+      // Lecture : utilisateur authentifié
+      allow read: if isAuthenticated();
+      
+      // Upload : utilisateur authentifié avec validation
+      allow create: if isAuthenticated() &&
+        isValidFileSize() &&
+        isValidMediaType();
+      
+      // Mise à jour : même utilisateur uniquement
+      allow update: if isAuthenticated() &&
+        isValidFileSize() &&
+        isValidMediaType();
+      
+      // Suppression : utilisateur authentifié
+      allow delete: if isAuthenticated();
+    }
+    
+    // ============================================================
+    // DOSSIER: users/{userId}/avatar
+    // Photo de profil utilisateur
+    // ============================================================
+    
+    match /users/{userId}/avatar/{fileName} {
+      
+      // Lecture : tout le monde
+      allow read: if true;
+      
+      // Upload : propriétaire uniquement
+      allow create, update: if isAuthenticated() &&
+        request.auth.uid == userId &&
+        isImageType() &&
+        request.resource.size < 5 * 1024 * 1024; // Max 5 MB
+      
+      // Suppression : propriétaire uniquement
+      allow delete: if isAuthenticated() &&
+        request.auth.uid == userId;
+    }
+    
+    // ============================================================
+    // DOSSIER: couples/{coupleId}/shared/*
+    // Médias partagés entre le couple
+    // ============================================================
+    
+    match /couples/{coupleId}/shared/{fileName} {
+      
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() &&
+        isValidFileSize() &&
+        isValidMediaType();
+      
+      allow delete: if isAuthenticated();
+    }
+    
+    // ============================================================
+    // RÈGLE PAR DÉFAUT
+    // ============================================================
+    
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

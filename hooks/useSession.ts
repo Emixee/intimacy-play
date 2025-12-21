@@ -4,22 +4,12 @@
  * Gère automatiquement :
  * - L'écoute des changements de session Firestore
  * - Le state de la session (session, loading, error)
- * - Les computed values (isMyTurn, currentChallenge, progress)
+ * - Les computed values (isMyTurn, isChallengeForMe, currentChallenge, progress)
  * - Les actions (completeChallenge, skipChallenge, abandonSession)
  *
- * Usage:
- * const {
- *   session,
- *   isLoading,
- *   error,
- *   isMyTurn,
- *   currentChallenge,
- *   progress,
- *   completeChallenge,
- *   skipChallenge,
- *   abandonSession,
- *   clearSession
- * } = useSession(sessionCode, userId);
+ * LOGIQUE DE VALIDATION :
+ * - isMyTurn : C'est mon tour de VALIDER (le partenaire qui reçoit la preuve)
+ * - isChallengeForMe : C'est MOI qui dois faire le défi actuel
  */
 
 import { useEffect, useCallback, useRef, useState, useMemo } from "react";
@@ -30,6 +20,7 @@ import {
   SessionChallenge,
   PlayerRole,
   ApiResponse,
+  MAX_CHALLENGE_CHANGES,
 } from "../types";
 
 // ============================================================
@@ -45,10 +36,12 @@ interface UseSessionReturn {
 
   // Computed values
   isMyTurn: boolean;
+  isChallengeForMe: boolean;
   myRole: PlayerRole | null;
   currentChallenge: SessionChallenge | null;
   progress: number;
   completedCount: number;
+  changesRemaining: number;
   isSessionActive: boolean;
   isSessionCompleted: boolean;
   isSessionAbandoned: boolean;
@@ -179,30 +172,6 @@ export const useSession = ({
   }, [currentSession, userId]);
 
   /**
-   * Est-ce le tour de l'utilisateur de VALIDER ?
-   * Le validateur est celui qui n'a PAS à faire le défi actuel.
-   * Si le défi est pour le créateur (son genre), c'est le partenaire qui valide.
-   * Si le défi est pour le partenaire (son genre), c'est le créateur qui valide.
-   */
-  const isMyTurn = useMemo((): boolean => {
-    if (!currentSession || !myRole || !userId) return false;
-    if (currentSession.status !== "active") return false;
-
-    const currentChallengeData = currentSession.challenges[currentSession.currentChallengeIndex];
-    if (!currentChallengeData) return false;
-
-    // Déterminer si le défi est pour le créateur (basé sur le genre)
-    const challengeForCreator = currentChallengeData.forGender === currentSession.creatorGender;
-
-    // Si le défi est pour le créateur, c'est le partenaire qui valide (et vice versa)
-    if (challengeForCreator) {
-      return myRole === "partner"; // Le partenaire valide
-    } else {
-      return myRole === "creator"; // Le créateur valide
-    }
-  }, [currentSession, myRole, userId]);
-
-  /**
    * Défi actuel
    */
   const currentChallenge = useMemo((): SessionChallenge | null => {
@@ -212,6 +181,38 @@ export const useSession = ({
     }
     return currentSession.challenges[currentSession.currentChallengeIndex] || null;
   }, [currentSession]);
+
+  /**
+   * Est-ce que le défi actuel est pour MOI ?
+   * (Basé sur le genre du défi vs mon genre)
+   */
+  const isChallengeForMe = useMemo((): boolean => {
+    if (!currentSession || !myRole || !currentChallenge) return false;
+
+    // Déterminer mon genre
+    const myGender =
+      myRole === "creator"
+        ? currentSession.creatorGender
+        : currentSession.partnerGender;
+
+    // Le défi est pour moi si forGender correspond à mon genre
+    return currentChallenge.forGender === myGender;
+  }, [currentSession, myRole, currentChallenge]);
+
+  /**
+   * Est-ce mon tour de VALIDER ?
+   * Le validateur est l'OPPOSÉ de celui qui fait le défi
+   */
+  const isMyTurn = useMemo((): boolean => {
+    if (!currentSession || !myRole) return false;
+    if (currentSession.status !== "active") return false;
+    if (!currentChallenge) return false;
+
+    // Si le défi est pour moi, c'est le partenaire qui valide
+    // Si le défi est pour le partenaire, c'est moi qui valide
+    // Donc: isMyTurn = !isChallengeForMe
+    return !isChallengeForMe;
+  }, [currentSession, myRole, currentChallenge, isChallengeForMe]);
 
   /**
    * Progression en pourcentage
@@ -233,6 +234,25 @@ export const useSession = ({
   }, [currentSession]);
 
   /**
+   * Nombre de changements restants pour ce joueur
+   */
+  const changesRemaining = useMemo((): number => {
+    if (!currentSession || !myRole) return 0;
+
+    const changesUsed =
+      myRole === "creator"
+        ? currentSession.creatorChangesUsed || 0
+        : currentSession.partnerChangesUsed || 0;
+
+    const bonusChanges =
+      myRole === "creator"
+        ? currentSession.creatorBonusChanges || 0
+        : currentSession.partnerBonusChanges || 0;
+
+    return MAX_CHALLENGE_CHANGES + bonusChanges - changesUsed;
+  }, [currentSession, myRole]);
+
+  /**
    * État de la session
    */
   const isSessionActive = currentSession?.status === "active";
@@ -244,7 +264,7 @@ export const useSession = ({
   // ----------------------------------------------------------
 
   /**
-   * Compléter le défi actuel
+   * Compléter le défi actuel (validation par le partenaire)
    */
   const completeChallenge = useCallback(async (): Promise<ApiResponse<SessionChallenge | null>> => {
     if (!sessionCode || !userId) {
@@ -305,6 +325,13 @@ export const useSession = ({
         };
       }
 
+      if (changesRemaining <= 0) {
+        return {
+          success: false,
+          error: "Vous n'avez plus de changements disponibles",
+        };
+      }
+
       console.log(
         "[useSession] Skipping challenge:",
         currentSession.currentChallengeIndex
@@ -313,7 +340,8 @@ export const useSession = ({
       const result = await sessionService.swapChallenge(
         sessionCode,
         currentSession.currentChallengeIndex,
-        newChallenge
+        newChallenge,
+        userId || ""
       );
 
       if (!result.success) {
@@ -322,7 +350,7 @@ export const useSession = ({
 
       return result;
     },
-    [sessionCode, currentSession]
+    [sessionCode, currentSession, changesRemaining, userId]
   );
 
   /**
@@ -400,10 +428,12 @@ export const useSession = ({
 
     // Computed values
     isMyTurn,
+    isChallengeForMe,
     myRole,
     currentChallenge,
     progress,
     completedCount,
+    changesRemaining,
     isSessionActive,
     isSessionCompleted,
     isSessionAbandoned,

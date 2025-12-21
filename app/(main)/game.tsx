@@ -3,6 +3,10 @@
  *
  * Affiche le défi actuel et gère la progression de la partie.
  * Utilise useSession pour le temps réel et les actions.
+ *
+ * LOGIQUE :
+ * - isChallengeForMe : Le défi est pour MOI → j'envoie la preuve
+ * - isMyTurn : C'est mon tour de VALIDER → je valide après réception de la preuve
  */
 
 import React, { useState, useCallback, useMemo } from "react";
@@ -27,13 +31,14 @@ import {
 } from "../../components/ui";
 import { useSession } from "../../hooks/useSession";
 import { useAuth } from "../../hooks/useAuth";
+import challengesData from "../../data/challenges";
 import {
   SessionChallenge,
   ChallengeType,
   IntensityLevel,
   Gender,
+  INTENSITY_LEVELS,
 } from "../../types";
-import challengesData from "../../data/challenges";
 
 // ============================================================
 // TYPES LOCAUX
@@ -62,41 +67,57 @@ const getChallengeTypeEmoji = (type: ChallengeType): string => {
 };
 
 /**
- * Génère des défis alternatifs depuis la base de données
+ * Mélange un tableau (Fisher-Yates)
+ */
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+/**
+ * Génère des défis alternatifs RÉELS depuis la base de données
  */
 const generateAlternatives = (
   currentChallenge: SessionChallenge,
+  usedTexts: string[],
   count: number = 2
 ): AlternativeChallenge[] => {
-  // Récupérer les défis du même niveau et genre
-  const levelKey = `CHALLENGES_N${currentChallenge.level}_${currentChallenge.forGender === "homme" ? "HOMME" : "FEMME"}` as keyof typeof challengesData;
-  
-  const availableChallenges = challengesData[levelKey] as Array<{
-    text: string;
-    type: ChallengeType;
-    theme: string;
-  }>;
+  const { level, forGender } = currentChallenge;
 
-  if (!availableChallenges || availableChallenges.length === 0) {
+  // Construire la clé pour accéder aux défis
+  const genderKey = forGender.toUpperCase() as "HOMME" | "FEMME";
+  const challengeArrayKey = `CHALLENGES_N${level}_${genderKey}` as keyof typeof challengesData;
+
+  // Récupérer le tableau de défis correspondant
+  const challengeArray = challengesData[challengeArrayKey];
+
+  if (!challengeArray || !Array.isArray(challengeArray)) {
+    console.warn(`[generateAlternatives] No challenges found for ${challengeArrayKey}`);
     return [];
   }
 
-  // Filtrer pour exclure le défi actuel
-  const filtered = availableChallenges.filter(
-    (c) => c.text !== currentChallenge.text
+  // Filtrer les défis déjà utilisés (y compris le défi actuel)
+  const allUsedTexts = [...usedTexts, currentChallenge.text];
+  const availableChallenges = challengeArray.filter(
+    (c: { text: string }) => !allUsedTexts.includes(c.text)
   );
 
-  // Mélanger et prendre les premiers
-  const shuffled = [...filtered].sort(() => Math.random() - 0.5);
+  // Mélanger et prendre le nombre demandé
+  const shuffled = shuffleArray(availableChallenges);
   const selected = shuffled.slice(0, count);
 
-  return selected.map((c, index) => ({
+  // Convertir en SessionChallenge
+  return selected.map((c: { text: string; type: ChallengeType; theme: string }, index: number) => ({
     id: `alt-${index}-${Date.now()}`,
     challenge: {
       text: c.text,
-      level: currentChallenge.level,
+      level,
       type: c.type,
-      forGender: currentChallenge.forGender,
+      forGender,
       completed: false,
       completedBy: null,
       completedAt: null,
@@ -122,7 +143,7 @@ function GameHeader({
   currentLevel: IntensityLevel;
   onQuit: () => void;
 }) {
-  const progressPercent = Math.round(((currentIndex) / totalCount) * 100);
+  const progressPercent = Math.round((currentIndex / totalCount) * 100);
 
   return (
     <View className="px-5 pt-4 pb-2">
@@ -161,31 +182,32 @@ function GameHeader({
 }
 
 /**
- * Indicateur de tour - indique qui doit faire le défi et qui valide
+ * Indicateur de tour amélioré
+ * Distingue clairement : faire le défi vs valider le défi
  */
 function TurnIndicator({
-  isMyTurnToValidate,
   isChallengeForMe,
+  isMyTurn,
   partnerName,
 }: {
-  isMyTurnToValidate: boolean;
   isChallengeForMe: boolean;
+  isMyTurn: boolean;
   partnerName: string;
 }) {
+  // Cas 1 : Le défi est pour MOI → J'envoie la preuve
   if (isChallengeForMe) {
-    // C'est MOI qui dois faire le défi
     return (
-      <View className="flex-row items-center justify-center bg-purple-100 py-3 px-4 rounded-xl mb-4">
-        <Ionicons name="arrow-up-circle" size={20} color="#9333EA" />
-        <Text className="text-purple-700 font-semibold ml-2">
+      <View className="flex-row items-center justify-center bg-pink-100 py-3 px-4 rounded-xl mb-4">
+        <Ionicons name="flash" size={20} color="#EC4899" />
+        <Text className="text-pink-700 font-semibold ml-2">
           C'est ton défi ! Envoie la preuve à {partnerName}
         </Text>
       </View>
     );
   }
 
-  // C'est mon partenaire qui doit faire le défi
-  if (isMyTurnToValidate) {
+  // Cas 2 : Le défi est pour le partenaire, c'est MOI qui valide
+  if (isMyTurn) {
     return (
       <View className="flex-row items-center justify-center bg-green-100 py-3 px-4 rounded-xl mb-4">
         <Ionicons name="checkmark-circle" size={20} color="#10B981" />
@@ -196,6 +218,7 @@ function TurnIndicator({
     );
   }
 
+  // Cas 3 : Le défi n'est pas pour moi et ce n'est pas mon tour de valider
   return (
     <View className="flex-row items-center justify-center bg-amber-100 py-3 px-4 rounded-xl mb-4">
       <Ionicons name="time-outline" size={20} color="#F59E0B" />
@@ -221,14 +244,12 @@ function ChallengeCard({
   return (
     <Card
       variant="elevated"
-      className={`mb-6 ${isChallengeForMe ? "border-2 border-purple-300" : ""}`}
+      className={`mb-6 ${!isChallengeForMe ? "opacity-80" : ""}`}
     >
       <Card.Content className="py-6">
         {/* Icône type */}
         <View className="items-center mb-4">
-          <View className={`w-16 h-16 rounded-full items-center justify-center ${
-            isChallengeForMe ? "bg-purple-100" : "bg-pink-100"
-          }`}>
+          <View className="w-16 h-16 rounded-full bg-pink-100 items-center justify-center">
             <Text className="text-3xl">{typeEmoji}</Text>
           </View>
         </View>
@@ -246,13 +267,19 @@ function ChallengeCard({
 
         {/* Indicateur pour qui */}
         <View className="items-center mt-4">
-          <View className={`px-3 py-1 rounded-full ${
-            isChallengeForMe ? "bg-purple-100" : "bg-pink-100"
-          }`}>
-            <Text className={`text-sm font-medium ${
-              isChallengeForMe ? "text-purple-700" : "text-pink-700"
-            }`}>
-              {isChallengeForMe ? "👉 Ton défi" : `👤 Défi pour ${challenge.forGender === "homme" ? "lui" : "elle"}`}
+          <View
+            className={`px-3 py-1 rounded-full ${
+              isChallengeForMe ? "bg-pink-100" : "bg-gray-100"
+            }`}
+          >
+            <Text
+              className={`text-sm font-medium ${
+                isChallengeForMe ? "text-pink-600" : "text-gray-500"
+              }`}
+            >
+              {isChallengeForMe
+                ? "🎯 Pour toi"
+                : `👤 Pour ${challenge.forGender === "homme" ? "lui" : "elle"}`}
             </Text>
           </View>
         </View>
@@ -265,41 +292,55 @@ function ChallengeCard({
  * Boutons d'action
  */
 function ActionButtons({
-  isMyTurnToValidate,
   isChallengeForMe,
+  isMyTurn,
   isLoading,
+  changesRemaining,
   onComplete,
   onSkip,
 }: {
-  isMyTurnToValidate: boolean;
   isChallengeForMe: boolean;
+  isMyTurn: boolean;
   isLoading: boolean;
+  changesRemaining: number;
   onComplete: () => void;
   onSkip: () => void;
 }) {
+  // Le bouton principal est actif uniquement si c'est mon tour de VALIDER
+  const canValidate = isMyTurn && !isChallengeForMe;
+
+  // Le bouton de changement est actif si le défi est pour moi et j'ai des changements
+  const canChange = isChallengeForMe && changesRemaining > 0;
+
   return (
     <View className="gap-3">
-      {/* Bouton principal - visible seulement si c'est à moi de valider */}
+      {/* Bouton principal */}
       <Button
-        title={isChallengeForMe ? "En attente de validation..." : "Défi accompli ✓"}
-        variant={isMyTurnToValidate ? "primary" : "secondary"}
+        title={
+          isChallengeForMe
+            ? "En attente de validation..."
+            : "Défi accompli ✓"
+        }
+        variant="primary"
         size="lg"
         fullWidth
-        disabled={!isMyTurnToValidate || isChallengeForMe}
+        disabled={!canValidate || isLoading}
         loading={isLoading}
         onPress={onComplete}
       />
 
-      {/* Bouton secondaire - changer de défi */}
-      <Button
-        title="Changer de défi"
-        variant="outline"
-        size="md"
-        fullWidth
-        disabled={isLoading}
-        onPress={onSkip}
-        icon={<Ionicons name="shuffle-outline" size={20} color="#EC4899" />}
-      />
+      {/* Bouton secondaire - Changer de défi */}
+      {isChallengeForMe && (
+        <Button
+          title={`Changer de défi (${changesRemaining} restant${changesRemaining > 1 ? "s" : ""})`}
+          variant="outline"
+          size="md"
+          fullWidth
+          disabled={!canChange || isLoading}
+          onPress={onSkip}
+          icon={<Ionicons name="shuffle-outline" size={20} color={canChange ? "#EC4899" : "#9CA3AF"} />}
+        />
+      )}
     </View>
   );
 }
@@ -344,9 +385,12 @@ function AlternativesModal({
             {/* Liste des alternatives */}
             <ScrollView className="max-h-96 px-5 py-4">
               {alternatives.length === 0 ? (
-                <Text className="text-gray-500 text-center py-4">
-                  Aucune alternative disponible pour ce niveau.
-                </Text>
+                <View className="items-center py-8">
+                  <Ionicons name="alert-circle-outline" size={48} color="#9CA3AF" />
+                  <Text className="text-gray-500 mt-2 text-center">
+                    Aucune alternative disponible pour ce niveau.
+                  </Text>
+                </View>
               ) : (
                 alternatives.map((alt) => (
                   <Pressable
@@ -410,12 +454,31 @@ function GameOverScreen({
   onPlayAgain: () => void;
   onGoHome: () => void;
 }) {
+  // Message selon le taux de complétion
+  const completionRate = completedCount / totalCount;
+  let message = "";
+  let emoji = "🎉";
+
+  if (completionRate === 1) {
+    message = "Parfait ! Vous avez relevé tous les défis !";
+    emoji = "🏆";
+  } else if (completionRate >= 0.8) {
+    message = "Excellent ! Quelle complicité !";
+    emoji = "🔥";
+  } else if (completionRate >= 0.5) {
+    message = "Beau début ! À quand la revanche ?";
+    emoji = "💕";
+  } else {
+    message = "L'important c'est de s'amuser !";
+    emoji = "😊";
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-pink-50">
       <View className="flex-1 px-6 justify-center">
         {/* Icône de célébration */}
         <View className="items-center mb-8">
-          <Text className="text-7xl">🎉</Text>
+          <Text className="text-7xl">{emoji}</Text>
         </View>
 
         {/* Titre */}
@@ -423,7 +486,7 @@ function GameOverScreen({
           Félicitations !
         </Text>
         <Text className="text-gray-500 text-center text-lg mb-8">
-          Vous avez terminé la partie
+          {message}
         </Text>
 
         {/* Stats */}
@@ -537,10 +600,12 @@ export default function GameScreen() {
     isLoading,
     error,
     isMyTurn,
+    isChallengeForMe,
     myRole,
     currentChallenge,
     progress,
     completedCount,
+    changesRemaining,
     isSessionCompleted,
     isSessionAbandoned,
     completeChallenge,
@@ -568,8 +633,10 @@ export default function GameScreen() {
    * Nom du partenaire
    */
   const partnerName = useMemo(() => {
-    return "ton partenaire";
-  }, []);
+    if (!session) return "partenaire";
+    // TODO: Récupérer le vrai nom depuis Firestore
+    return myRole === "creator" ? "ton/ta partenaire" : "ton/ta partenaire";
+  }, [session, myRole]);
 
   /**
    * Niveau actuel du défi
@@ -577,17 +644,12 @@ export default function GameScreen() {
   const currentLevel = currentChallenge?.level || 1;
 
   /**
-   * Est-ce que le défi actuel est pour moi ?
+   * Liste des textes déjà utilisés dans la session
    */
-  const isChallengeForMe = useMemo((): boolean => {
-    if (!currentChallenge || !userData || !session) return false;
-    
-    // Mon genre
-    const myGender = userData.gender;
-    
-    // Le défi est pour moi si mon genre correspond au forGender du défi
-    return currentChallenge.forGender === myGender;
-  }, [currentChallenge, userData, session]);
+  const usedChallengeTexts = useMemo(() => {
+    if (!session) return [];
+    return session.challenges.map((c) => c.text);
+  }, [session]);
 
   // ----------------------------------------------------------
   // HANDLERS
@@ -615,10 +677,10 @@ export default function GameScreen() {
     if (!currentChallenge) return;
 
     // Générer des alternatives depuis la vraie base de données
-    const alts = generateAlternatives(currentChallenge, 2);
+    const alts = generateAlternatives(currentChallenge, usedChallengeTexts, 2);
     setAlternatives(alts);
     setShowAlternatives(true);
-  }, [currentChallenge]);
+  }, [currentChallenge, usedChallengeTexts]);
 
   /**
    * Sélectionne un défi alternatif
@@ -740,17 +802,17 @@ export default function GameScreen() {
 
       {/* Contenu principal */}
       <View className="flex-1 px-5 pt-4">
-        {/* Indicateur de tour */}
-        <TurnIndicator 
-          isMyTurnToValidate={isMyTurn} 
+        {/* Indicateur de tour amélioré */}
+        <TurnIndicator
           isChallengeForMe={isChallengeForMe}
-          partnerName={partnerName} 
+          isMyTurn={isMyTurn}
+          partnerName={partnerName}
         />
 
         {/* Carte du défi */}
-        <ChallengeCard 
-          challenge={currentChallenge} 
-          isChallengeForMe={isChallengeForMe} 
+        <ChallengeCard
+          challenge={currentChallenge}
+          isChallengeForMe={isChallengeForMe}
         />
 
         {/* Spacer */}
@@ -758,9 +820,10 @@ export default function GameScreen() {
 
         {/* Boutons d'action */}
         <ActionButtons
-          isMyTurnToValidate={isMyTurn}
           isChallengeForMe={isChallengeForMe}
+          isMyTurn={isMyTurn}
           isLoading={isCompleting}
+          changesRemaining={changesRemaining}
           onComplete={handleComplete}
           onSkip={handleOpenAlternatives}
         />
