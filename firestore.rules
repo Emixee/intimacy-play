@@ -39,19 +39,14 @@ service cloud.firestore {
       return level is int && level >= 1 && level <= 4;
     }
     
-    // Vérifie si le niveau nécessite premium (3-4)
+    // Vérifie si le niveau nécessite premium (niveau 4 uniquement)
     function intensityRequiresPremium(level) {
-      return level >= 3;
+      return level >= 4;
     }
     
     // Vérifie qu'une valeur est un statut de session valide
     function isValidSessionStatus(status) {
       return status in ['waiting', 'active', 'completed', 'abandoned'];
-    }
-    
-    // Vérifie qu'une valeur est un statut de couple valide
-    function isValidCoupleStatus(status) {
-      return status in ['pending', 'active', 'unlinked'];
     }
     
     // Vérifie qu'une valeur est un rôle de joueur valide
@@ -78,7 +73,6 @@ service cloud.firestore {
       allow create: if isOwner(userId) &&
         request.resource.data.keys().hasAll([
           'email', 'displayName', 'gender', 'dateOfBirth',
-          'coupleId', 'partnerNickname',
           'premium', 'premiumUntil', 'premiumPlan',
           'preferences', 'createdAt', 'lastLogin',
           'notificationsEnabled', 'fcmToken'
@@ -87,7 +81,6 @@ service cloud.firestore {
         request.resource.data.premium == false &&
         request.resource.data.premiumUntil == null &&
         request.resource.data.premiumPlan == null &&
-        request.resource.data.coupleId == null &&
         request.resource.data.email == request.auth.token.email;
       
       // Mise à jour : propriétaire uniquement
@@ -108,53 +101,12 @@ service cloud.firestore {
     }
     
     // ============================================================
-    // COLLECTION: couples
-    // ============================================================
-    
-    match /couples/{coupleId} {
-      
-      // Lecture : membres du couple ou recherche par code
-      allow read: if isAuthenticated() && 
-        (resource.data.user1Id == request.auth.uid || 
-         resource.data.user2Id == request.auth.uid ||
-         resource.data.inviteCode != null);
-      
-      // Création : utilisateur authentifié crée son couple
-      allow create: if isAuthenticated() &&
-        request.resource.data.keys().hasAll([
-          'user1Id', 'user2Id', 'inviteCode', 'inviteCodeExpiresAt',
-          'status', 'bothPremium', 'createdAt', 'linkedAt', 'unlinkedAt'
-        ]) &&
-        request.resource.data.user1Id == request.auth.uid &&
-        request.resource.data.user2Id == null &&
-        request.resource.data.status == 'pending' &&
-        request.resource.data.bothPremium == false &&
-        request.resource.data.linkedAt == null &&
-        request.resource.data.unlinkedAt == null;
-      
-      // Mise à jour : membres du couple
-      allow update: if isAuthenticated() &&
-        (resource.data.user1Id == request.auth.uid ||
-         (resource.data.status == 'pending' && 
-          resource.data.user2Id == null &&
-          request.resource.data.user2Id == request.auth.uid) ||
-         resource.data.user2Id == request.auth.uid) &&
-        request.resource.data.user1Id == resource.data.user1Id &&
-        request.resource.data.createdAt == resource.data.createdAt &&
-        isValidCoupleStatus(request.resource.data.status);
-      
-      // Suppression : créateur uniquement
-      allow delete: if isAuthenticated() && 
-        resource.data.user1Id == request.auth.uid;
-    }
-    
-    // ============================================================
     // COLLECTION: sessions
     // ============================================================
     
     match /sessions/{sessionCode} {
       
-      // Lecture : tout utilisateur authentifié
+      // Lecture : tout utilisateur authentifié (pour rejoindre via code)
       allow read: if isAuthenticated();
       
       // Création : utilisateur authentifié
@@ -167,7 +119,7 @@ service cloud.firestore {
         request.resource.data.challengeCount >= 5 &&
         request.resource.data.challengeCount <= 50 &&
         isValidIntensity(request.resource.data.startIntensity) &&
-        // Vérification premium pour intensité 3-4
+        // Vérification premium pour intensité 4
         (!intensityRequiresPremium(request.resource.data.startIntensity) || isPremium()) &&
         // Vérification premium pour > 10 défis
         (request.resource.data.challengeCount <= 10 || isPremium()) &&
@@ -198,9 +150,10 @@ service cloud.firestore {
         request.resource.data.currentChallengeIndex <= request.resource.data.challengeCount &&
         isValidPlayerRole(request.resource.data.currentPlayer);
       
-      // Suppression : créateur uniquement
+      // Suppression : créateur uniquement (session en attente ou terminée)
       allow delete: if isAuthenticated() && 
-        resource.data.creatorId == request.auth.uid;
+        resource.data.creatorId == request.auth.uid &&
+        resource.data.status in ['waiting', 'completed', 'abandoned'];
       
       // ----------------------------------------------------------
       // SOUS-COLLECTION: messages

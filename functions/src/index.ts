@@ -17,7 +17,7 @@ import {getMessaging} from "firebase-admin/messaging";
 initializeApp();
 
 // Limite globale des instances (contrôle des coûts)
-setGlobalOptions({maxInstances: 10, region: "europe-west3"});
+setGlobalOptions({maxInstances: 10, region: "europe-west1"});
 
 // Références
 const db = getFirestore();
