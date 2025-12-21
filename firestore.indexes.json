@@ -4,13 +4,6 @@
       "collectionGroup": "couples",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "inviteCode", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "couples",
-      "queryScope": "COLLECTION",
-      "fields": [
         { "fieldPath": "user1Id", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
@@ -45,13 +38,6 @@
       "fields": [
         { "fieldPath": "partnerId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "messages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "createdAt", "order": "ASCENDING" }
       ]
     }
   ],
