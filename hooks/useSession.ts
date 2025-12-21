@@ -179,13 +179,28 @@ export const useSession = ({
   }, [currentSession, userId]);
 
   /**
-   * Est-ce le tour de l'utilisateur ?
+   * Est-ce le tour de l'utilisateur de VALIDER ?
+   * Le validateur est celui qui n'a PAS à faire le défi actuel.
+   * Si le défi est pour le créateur (son genre), c'est le partenaire qui valide.
+   * Si le défi est pour le partenaire (son genre), c'est le créateur qui valide.
    */
   const isMyTurn = useMemo((): boolean => {
-    if (!currentSession || !myRole) return false;
+    if (!currentSession || !myRole || !userId) return false;
     if (currentSession.status !== "active") return false;
-    return currentSession.currentPlayer === myRole;
-  }, [currentSession, myRole]);
+
+    const currentChallengeData = currentSession.challenges[currentSession.currentChallengeIndex];
+    if (!currentChallengeData) return false;
+
+    // Déterminer si le défi est pour le créateur (basé sur le genre)
+    const challengeForCreator = currentChallengeData.forGender === currentSession.creatorGender;
+
+    // Si le défi est pour le créateur, c'est le partenaire qui valide (et vice versa)
+    if (challengeForCreator) {
+      return myRole === "partner"; // Le partenaire valide
+    } else {
+      return myRole === "creator"; // Le créateur valide
+    }
+  }, [currentSession, myRole, userId]);
 
   /**
    * Défi actuel
@@ -231,9 +246,7 @@ export const useSession = ({
   /**
    * Compléter le défi actuel
    */
-  const completeChallenge = useCallback(async (): Promise
-    ApiResponse<SessionChallenge | null>
-  > => {
+  const completeChallenge = useCallback(async (): Promise<ApiResponse<SessionChallenge | null>> => {
     if (!sessionCode || !userId) {
       return {
         success: false,
@@ -251,7 +264,7 @@ export const useSession = ({
     if (!isMyTurn) {
       return {
         success: false,
-        error: "Ce n'est pas votre tour",
+        error: "Ce n'est pas votre tour de valider",
       };
     }
 

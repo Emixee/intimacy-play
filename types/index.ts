@@ -12,6 +12,16 @@ export type PlayerRole = "creator" | "partner";
 export type ChallengeType = "audio" | "video" | "photo" | "texte";
 
 // ============================================================
+// CONSTANTES
+// ============================================================
+
+/** Nombre maximum de changements de défi par partie */
+export const MAX_CHALLENGE_CHANGES = 3;
+
+/** Nombre maximum de changements bonus via pub */
+export const MAX_BONUS_CHANGES = 3;
+
+// ============================================================
 // USER
 // ============================================================
 
@@ -53,6 +63,12 @@ export interface Session {
   currentChallengeIndex: number;
   currentPlayer: PlayerRole;
   challenges: SessionChallenge[];
+  // Compteurs de changements de défis
+  creatorChangesUsed: number;
+  partnerChangesUsed: number;
+  creatorBonusChanges: number;
+  partnerBonusChanges: number;
+  // Timestamps
   createdAt: FirebaseFirestoreTypes.Timestamp;
   startedAt: FirebaseFirestoreTypes.Timestamp | null;
   completedAt: FirebaseFirestoreTypes.Timestamp | null;

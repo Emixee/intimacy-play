@@ -42,7 +42,8 @@ const SESSION_ERROR_MESSAGES: Record<string, string> = {
   ALREADY_IN_SESSION: "Vous êtes déjà dans cette session",
   CHALLENGE_NOT_FOUND: "Défi introuvable",
   CHALLENGE_ALREADY_COMPLETED: "Ce défi a déjà été accompli",
-  NOT_YOUR_TURN: "Ce n'est pas votre tour",
+  NOT_YOUR_TURN: "Ce n'est pas votre tour de valider",
+  NO_CHANGES_LEFT: "Vous n'avez plus de changements disponibles",
   UNKNOWN_ERROR: "Une erreur est survenue",
   NETWORK_ERROR: "Erreur de connexion. Vérifiez votre réseau",
 };
@@ -176,6 +177,12 @@ export const sessionService = {
         currentChallengeIndex: 0,
         currentPlayer: "creator",
         challenges,
+        // Compteurs de changements
+        creatorChangesUsed: 0,
+        partnerChangesUsed: 0,
+        creatorBonusChanges: 0,
+        partnerBonusChanges: 0,
+        // Timestamps
         createdAt: serverTimestamp() as any,
         startedAt: null,
         completedAt: null,
@@ -395,6 +402,10 @@ export const sessionService = {
 
   /**
    * Complète un défi
+   *
+   * LOGIQUE : C'est le partenaire qui REÇOIT la preuve qui valide.
+   * - Si le défi est pour le créateur (son genre), c'est le partenaire qui valide
+   * - Si le défi est pour le partenaire (son genre), c'est le créateur qui valide
    */
   completeChallenge: async (
     sessionCode: string,
@@ -437,13 +448,33 @@ export const sessionService = {
         };
       }
 
+      // ============================================================
+      // NOUVELLE LOGIQUE : Vérifier qui peut valider
+      // Le validateur est celui qui N'A PAS à faire le défi
+      // ============================================================
+      const currentChallenge = session.challenges[challengeIndex];
       const userRole = getUserRoleInSession(session, odfsdfhdjsud);
-      if (userRole !== session.currentPlayer) {
+
+      if (!userRole) {
+        return {
+          success: false,
+          error: getSessionErrorMessage("NOT_SESSION_MEMBER"),
+        };
+      }
+
+      // Déterminer si le défi est pour le créateur (basé sur le genre)
+      const challengeForCreator = currentChallenge.forGender === session.creatorGender;
+
+      // Le validateur est l'OPPOSÉ de celui qui fait le défi
+      const expectedValidator: PlayerRole = challengeForCreator ? "partner" : "creator";
+
+      if (userRole !== expectedValidator) {
         return {
           success: false,
           error: getSessionErrorMessage("NOT_YOUR_TURN"),
         };
       }
+      // ============================================================
 
       const updatedChallenges = [...session.challenges];
       updatedChallenges[challengeIndex] = {
@@ -455,7 +486,13 @@ export const sessionService = {
 
       const nextIndex = challengeIndex + 1;
       const isLastChallenge = nextIndex >= session.challengeCount;
-      const nextPlayer: PlayerRole = session.currentPlayer === "creator" ? "partner" : "creator";
+
+      // Le prochain "currentPlayer" indique à qui est le prochain défi
+      const nextChallenge = isLastChallenge ? null : updatedChallenges[nextIndex];
+      const nextChallengeForCreator = nextChallenge
+        ? nextChallenge.forGender === session.creatorGender
+        : false;
+      const nextPlayer: PlayerRole = nextChallengeForCreator ? "creator" : "partner";
 
       const updateData: Partial<Session> = {
         challenges: updatedChallenges,
@@ -470,9 +507,9 @@ export const sessionService = {
 
       await sessionRef.update(updateData);
 
-      console.log(`[SessionService] Challenge ${challengeIndex} completed in session ${sessionCode}`);
-
-      const nextChallenge = isLastChallenge ? null : updatedChallenges[nextIndex];
+      console.log(
+        `[SessionService] Challenge ${challengeIndex} validated by ${userRole} in session ${sessionCode}`
+      );
 
       return {
         success: true,
@@ -488,12 +525,13 @@ export const sessionService = {
   },
 
   /**
-   * Échange un défi
+   * Échange un défi et incrémente le compteur de changements
    */
   swapChallenge: async (
     sessionCode: string,
     challengeIndex: number,
-    newChallenge: SessionChallenge
+    newChallenge: SessionChallenge,
+    userId: string
   ): Promise<ApiResponse> => {
     const normalizedCode = normalizeCode(sessionCode);
 
@@ -517,12 +555,33 @@ export const sessionService = {
         };
       }
 
+      // Déterminer le rôle du joueur
+      const userRole = getUserRoleInSession(session, userId);
+      if (!userRole) {
+        return {
+          success: false,
+          error: getSessionErrorMessage("NOT_SESSION_MEMBER"),
+        };
+      }
+
+      // Mettre à jour les défis
       const updatedChallenges = [...session.challenges];
       updatedChallenges[challengeIndex] = newChallenge;
 
-      await sessionRef.update({ challenges: updatedChallenges });
+      // Incrémenter le compteur de changements
+      const updateData: Partial<Session> = {
+        challenges: updatedChallenges,
+      };
 
-      console.log(`[SessionService] Challenge ${challengeIndex} swapped in session ${sessionCode}`);
+      if (userRole === "creator") {
+        updateData.creatorChangesUsed = (session.creatorChangesUsed || 0) + 1;
+      } else {
+        updateData.partnerChangesUsed = (session.partnerChangesUsed || 0) + 1;
+      }
+
+      await sessionRef.update(updateData);
+
+      console.log(`[SessionService] Challenge ${challengeIndex} swapped by ${userRole} in session ${sessionCode}`);
 
       return { success: true };
     } catch (error: any) {
