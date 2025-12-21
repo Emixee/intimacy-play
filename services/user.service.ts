@@ -10,7 +10,6 @@
 
 import { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
 import {
-  firestore,
   serverTimestamp,
   toTimestamp,
   usersCollection,
@@ -21,6 +20,8 @@ import {
   PremiumPlan,
   ApiResponse,
   Gender,
+  UserPreferences,
+  DEFAULT_USER_PREFERENCES,
 } from "../types";
 
 // ============================================================
@@ -63,21 +64,29 @@ export const userService = {
     data: CreateUserData
   ): Promise<ApiResponse<User>> {
     try {
-      const userDoc: Omit<User, "id"> = {
+      const newUserDoc: Omit<User, "id"> = {
         email: data.email,
         displayName: data.displayName,
         gender: data.gender,
         dateOfBirth: toTimestamp(data.dateOfBirth),
+        // Couple (null par défaut)
+        coupleId: null,
+        partnerNickname: null,
+        // Premium
         premium: false,
         premiumUntil: null,
         premiumPlan: null,
+        // Préférences (REQUIS par les règles Firestore)
+        preferences: DEFAULT_USER_PREFERENCES,
+        // Timestamps
         createdAt: serverTimestamp() as FirebaseFirestoreTypes.Timestamp,
         lastLogin: serverTimestamp() as FirebaseFirestoreTypes.Timestamp,
+        // Notifications
         notificationsEnabled: true,
         fcmToken: null,
       };
 
-      await usersCollection().doc(uid).set(userDoc);
+      await usersCollection().doc(uid).set(newUserDoc);
 
       // Récupérer le document créé pour retourner les données complètes
       const createdDoc = await usersCollection().doc(uid).get();
