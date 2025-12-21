@@ -21,6 +21,90 @@ export const MAX_CHALLENGE_CHANGES = 3;
 /** Nombre maximum de changements bonus via pub */
 export const MAX_BONUS_CHANGES = 3;
 
+/** Thèmes gratuits */
+export const THEMES_FREE = ["romantic", "sensual"] as const;
+
+/** Thèmes premium */
+export const THEMES_PREMIUM = [
+  "torrid",
+  "fantasies",
+  "roleplay",
+  "domination",
+  "submission",
+  "bdsm_light",
+  "voyeurism",
+  "exhibitionism",
+  "foreplay",
+  "fellatio",
+  "cunnilingus",
+  "kamasutra",
+  "shower",
+  "massage",
+  "food",
+  "temperature",
+  "dirty_talk",
+  "sexting",
+  "surprises",
+  "quickie",
+  "tantrism",
+  "random",
+] as const;
+
+/** Tous les thèmes disponibles */
+export type Theme = (typeof THEMES_FREE)[number] | (typeof THEMES_PREMIUM)[number];
+
+/** Jouets disponibles (Premium) */
+export const TOYS = [
+  "vibrator",
+  "handcuffs",
+  "blindfold",
+  "anal_plug",
+  "dildo",
+  "cock_ring",
+  "massage_oil",
+  "feathers",
+  "nipple_clamps",
+  "collar",
+] as const;
+
+export type Toy = (typeof TOYS)[number];
+
+/** Réactions gratuites */
+export const REACTIONS_FREE = ["❤️", "🔥", "😍", "👏"] as const;
+
+/** Réactions premium */
+export const REACTIONS_PREMIUM = ["🥵", "💦", "👅", "🍑", "😈", "💋"] as const;
+
+export type Reaction =
+  | (typeof REACTIONS_FREE)[number]
+  | (typeof REACTIONS_PREMIUM)[number];
+
+// ============================================================
+// USER PREFERENCES
+// ============================================================
+
+/**
+ * Préférences utilisateur
+ * ⚠️ REQUIS par les règles Firestore lors de la création du compte
+ */
+export interface UserPreferences {
+  /** Thèmes de défis activés (gratuit: romantic, sensual) */
+  themes: Theme[];
+
+  /** Jouets possédés (Premium uniquement) */
+  toys: Toy[];
+
+  /** Préférences de type de médias acceptés (Premium uniquement) */
+  mediaPreferences: {
+    photo: boolean;
+    audio: boolean;
+    video: boolean;
+  };
+
+  /** Langue de l'application */
+  language: "fr" | "en";
+}
+
 // ============================================================
 // USER
 // ============================================================
@@ -31,11 +115,24 @@ export interface User {
   displayName: string;
   gender: Gender;
   dateOfBirth: FirebaseFirestoreTypes.Timestamp;
+
+  // Couple
+  coupleId: string | null;
+  partnerNickname: string | null;
+
+  // Premium
   premium: boolean;
   premiumUntil: FirebaseFirestoreTypes.Timestamp | null;
   premiumPlan: PremiumPlan | null;
+
+  // Préférences (REQUIS par les règles Firestore)
+  preferences: UserPreferences;
+
+  // Timestamps
   createdAt: FirebaseFirestoreTypes.Timestamp;
   lastLogin: FirebaseFirestoreTypes.Timestamp;
+
+  // Notifications
   notificationsEnabled: boolean;
   fcmToken: string | null;
 }
@@ -113,6 +210,11 @@ export interface IntensityInfo {
   isPremium: boolean;
 }
 
+/**
+ * Niveaux d'intensité disponibles
+ * - Niveaux 1-3 : Gratuits
+ * - Niveau 4 : Premium uniquement
+ */
 export const INTENSITY_LEVELS: IntensityInfo[] = [
   {
     level: 1,
@@ -173,4 +275,44 @@ export interface ApiResponse<T = void> {
   success: boolean;
   data?: T;
   error?: string;
+}
+
+// ============================================================
+// MESSAGE TYPES (pour le chat futur)
+// ============================================================
+
+export type MessageType = "text" | "photo" | "video" | "audio";
+
+export interface Message {
+  id: string;
+  senderId: string;
+  senderGender: Gender;
+  type: MessageType;
+  content: string;
+  mediaUrl: string | null;
+  mediaThumbnail: string | null;
+  mediaExpiresAt: FirebaseFirestoreTypes.Timestamp | null;
+  mediaDownloaded: boolean;
+  read: boolean;
+  readAt: FirebaseFirestoreTypes.Timestamp | null;
+  createdAt: FirebaseFirestoreTypes.Timestamp;
+}
+
+// ============================================================
+// COUPLE TYPES (pour le système de couples futur)
+// ============================================================
+
+export type CoupleStatus = "pending" | "active" | "unlinked";
+
+export interface Couple {
+  id: string;
+  user1Id: string;
+  user2Id: string | null;
+  inviteCode: string;
+  inviteCodeExpiresAt: FirebaseFirestoreTypes.Timestamp;
+  status: CoupleStatus;
+  bothPremium: boolean;
+  createdAt: FirebaseFirestoreTypes.Timestamp;
+  linkedAt: FirebaseFirestoreTypes.Timestamp | null;
+  unlinkedAt: FirebaseFirestoreTypes.Timestamp | null;
 }
