@@ -24,7 +24,6 @@ import {
   PlayerRole,
   CreateSessionData,
   ApiResponse,
-  ChallengeTemplate,
 } from "../types";
 
 // ============================================================
@@ -32,55 +31,52 @@ import {
 // ============================================================
 
 const SESSION_ERROR_MESSAGES: Record<string, string> = {
-  // Erreurs de session
   SESSION_NOT_FOUND: "Session introuvable",
   SESSION_FULL: "Cette session est déjà complète",
   SESSION_EXPIRED: "Cette session a expiré",
   SESSION_ALREADY_STARTED: "Cette session a déjà commencé",
   SESSION_ABANDONED: "Cette session a été abandonnée",
   SESSION_COMPLETED: "Cette session est terminée",
-
-  // Erreurs de participation
   NOT_SESSION_MEMBER: "Vous n'êtes pas membre de cette session",
   CANNOT_JOIN_OWN_SESSION: "Vous ne pouvez pas rejoindre votre propre session",
   ALREADY_IN_SESSION: "Vous êtes déjà dans cette session",
-
-  // Erreurs de défi
   CHALLENGE_NOT_FOUND: "Défi introuvable",
   CHALLENGE_ALREADY_COMPLETED: "Ce défi a déjà été accompli",
   NOT_YOUR_TURN: "Ce n'est pas votre tour",
-
-  // Erreurs générales
   UNKNOWN_ERROR: "Une erreur est survenue",
   NETWORK_ERROR: "Erreur de connexion. Vérifiez votre réseau",
 };
 
-/**
- * Récupère un message d'erreur en français
- */
 const getSessionErrorMessage = (errorKey: string): string => {
   return SESSION_ERROR_MESSAGES[errorKey] || SESSION_ERROR_MESSAGES.UNKNOWN_ERROR;
 };
 
 // ============================================================
-// HELPERS
+// HELPERS (fonctions pures, pas de this)
 // ============================================================
 
-/**
- * Caractères utilisés pour générer les codes de session
- * Exclusion des caractères ambigus : 0, O, I, 1, l
- */
 const CODE_CHARACTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-/**
- * Longueur du code de session
- */
 const CODE_LENGTH = 6;
+const SESSION_EXPIRATION_HOURS = 24;
 
 /**
- * Durée d'expiration d'une session en attente (en heures)
+ * Génère un code de session de 6 caractères
  */
-const SESSION_EXPIRATION_HOURS = 24;
+const generateCode = (): string => {
+  let code = "";
+  for (let i = 0; i < CODE_LENGTH; i++) {
+    const randomIndex = Math.floor(Math.random() * CODE_CHARACTERS.length);
+    code += CODE_CHARACTERS[randomIndex];
+  }
+  return `${code.slice(0, 3)} ${code.slice(3)}`;
+};
+
+/**
+ * Normalise un code (supprime espaces, majuscules)
+ */
+const normalizeCode = (code: string): string => {
+  return code.replace(/\s/g, "").toUpperCase();
+};
 
 /**
  * Vérifie si une session est expirée
@@ -90,102 +86,85 @@ const isSessionExpired = (createdAt: FirebaseFirestoreTypes.Timestamp): boolean 
   return Date.now() > expirationTime;
 };
 
+/**
+ * Vérifie si un code existe dans Firestore
+ */
+const checkCodeExists = async (normalizedCode: string): Promise<boolean> => {
+  try {
+    const doc = await sessionsCollection().doc(normalizedCode).get();
+    return doc.exists;
+  } catch (error) {
+    console.error("[SessionService] Error checking code:", error);
+    return false;
+  }
+};
+
+/**
+ * Génère un code unique qui n'existe pas
+ */
+const generateUniqueSessionCode = async (): Promise<string> => {
+  let code = generateCode();
+  let normalizedCode = normalizeCode(code);
+  let attempts = 0;
+  const maxAttempts = 10;
+
+  while (await checkCodeExists(normalizedCode) && attempts < maxAttempts) {
+    code = generateCode();
+    normalizedCode = normalizeCode(code);
+    attempts++;
+  }
+
+  if (attempts >= maxAttempts) {
+    throw new Error("Impossible de générer un code unique");
+  }
+
+  return code;
+};
+
+/**
+ * Détermine le rôle d'un utilisateur
+ */
+const getUserRoleInSession = (session: Session | Omit<Session, "id">, odfsdfhdjsud: string): PlayerRole | null => {
+  if (session.creatorId === odfsdfhdjsud) return "creator";
+  if (session.partnerId === odfsdfhdjsud) return "partner";
+  return null;
+};
+
 // ============================================================
 // SERVICE DE SESSION
 // ============================================================
 
 export const sessionService = {
-  // ----------------------------------------------------------
-  // GÉNÉRATION DE CODE
-  // ----------------------------------------------------------
+  // Expose les helpers si besoin
+  generateSessionCode: generateCode,
+  normalizeSessionCode: normalizeCode,
 
   /**
-   * Génère un code de session unique de 6 caractères
-   * Format : 3 lettres + espace + 3 caractères (ex: "MBW YY4")
-   *
-   * @returns Code unique formaté
+   * Vérifie si un code existe
    */
-  generateSessionCode(): string {
-    let code = "";
-    for (let i = 0; i < CODE_LENGTH; i++) {
-      const randomIndex = Math.floor(Math.random() * CODE_CHARACTERS.length);
-      code += CODE_CHARACTERS[randomIndex];
-    }
-    // Format : ABC DEF
-    return `${code.slice(0, 3)} ${code.slice(3)}`;
+  isCodeTaken: async (code: string): Promise<boolean> => {
+    const normalizedCode = normalizeCode(code);
+    return checkCodeExists(normalizedCode);
   },
 
   /**
-   * Normalise un code de session (supprime espaces, met en majuscules)
-   *
-   * @param code - Code saisi par l'utilisateur
-   * @returns Code normalisé
+   * Génère un code unique
    */
-  normalizeSessionCode(code: string): string {
-    return code.replace(/\s/g, "").toUpperCase();
-  },
+  generateUniqueCode: generateUniqueSessionCode,
 
   /**
-   * Vérifie si un code de session existe déjà
-   *
-   * @param code - Code à vérifier
-   * @returns true si le code existe déjà
+   * Crée une nouvelle session
    */
-  async isCodeTaken(code: string): Promise<boolean> {
-    const normalizedCode = this.normalizeSessionCode(code);
-    const doc = await sessionsCollection().doc(normalizedCode).get();
-    return doc.exists;
-  },
-
-  /**
-   * Génère un code unique qui n'existe pas dans la base
-   *
-   * @returns Code unique garanti
-   */
-  async generateUniqueCode(): Promise<string> {
-    let code = this.generateSessionCode();
-    let normalizedCode = this.normalizeSessionCode(code);
-    let attempts = 0;
-    const maxAttempts = 10;
-
-    while (await this.isCodeTaken(normalizedCode) && attempts < maxAttempts) {
-      code = this.generateSessionCode();
-      normalizedCode = this.normalizeSessionCode(code);
-      attempts++;
-    }
-
-    if (attempts >= maxAttempts) {
-      throw new Error("Impossible de générer un code unique");
-    }
-
-    return code;
-  },
-
-  // ----------------------------------------------------------
-  // CRÉATION DE SESSION
-  // ----------------------------------------------------------
-
-  /**
-   * Crée une nouvelle session de jeu
-   *
-   * @param creatorId - UID du créateur
-   * @param creatorGender - Genre du créateur
-   * @param config - Configuration de la session (nombre de défis, intensité)
-   * @param challenges - Liste des défis générés pour la session
-   * @returns ApiResponse avec le code de session
-   */
-  async createSession(
+  createSession: async (
     creatorId: string,
     creatorGender: Gender,
     config: CreateSessionData,
     challenges: SessionChallenge[]
-  ): Promise<ApiResponse<string>> {
+  ): Promise<ApiResponse<string>> => {
     try {
-      // 1. Générer un code unique
-      const sessionCode = await this.generateUniqueCode();
-      const normalizedCode = this.normalizeSessionCode(sessionCode);
+      const sessionCode = await generateUniqueSessionCode();
+      const normalizedCode = normalizeCode(sessionCode);
 
-      // 2. Créer le document de session
       const sessionData: Omit<Session, "id"> = {
         creatorId,
         creatorGender,
@@ -219,30 +198,20 @@ export const sessionService = {
     }
   },
 
-  // ----------------------------------------------------------
-  // REJOINDRE UNE SESSION
-  // ----------------------------------------------------------
-
   /**
-   * Permet à un partenaire de rejoindre une session existante
-   *
-   * @param sessionCode - Code de la session à rejoindre
-   * @param partnerId - UID du partenaire
-   * @param partnerGender - Genre du partenaire
-   * @returns ApiResponse avec les données de la session
+   * Rejoindre une session
    */
-  async joinSession(
+  joinSession: async (
     sessionCode: string,
     partnerId: string,
     partnerGender: Gender
-  ): Promise<ApiResponse<Session>> {
-    const normalizedCode = this.normalizeSessionCode(sessionCode);
+  ): Promise<ApiResponse<Session>> => {
+    const normalizedCode = normalizeCode(sessionCode);
 
     try {
       const sessionRef = sessionsCollection().doc(normalizedCode);
       const sessionDoc = await sessionRef.get();
 
-      // Vérification : la session existe-t-elle ?
       if (!sessionDoc.exists) {
         return {
           success: false,
@@ -252,7 +221,6 @@ export const sessionService = {
 
       const sessionData = sessionDoc.data() as Omit<Session, "id">;
 
-      // Vérification : le partenaire n'est pas le créateur
       if (sessionData.creatorId === partnerId) {
         return {
           success: false,
@@ -260,7 +228,6 @@ export const sessionService = {
         };
       }
 
-      // Vérification : la session est en attente
       if (sessionData.status !== "waiting") {
         const errorKey =
           sessionData.status === "active"
@@ -274,7 +241,6 @@ export const sessionService = {
         };
       }
 
-      // Vérification : la session n'est pas déjà pleine
       if (sessionData.partnerId !== null) {
         return {
           success: false,
@@ -282,9 +248,7 @@ export const sessionService = {
         };
       }
 
-      // Vérification : la session n'est pas expirée
       if (isSessionExpired(sessionData.createdAt as FirebaseFirestoreTypes.Timestamp)) {
-        // Marquer la session comme abandonnée
         await sessionRef.update({ status: "abandoned" });
         return {
           success: false,
@@ -292,7 +256,6 @@ export const sessionService = {
         };
       }
 
-      // Mettre à jour la session
       await sessionRef.update({
         partnerId,
         partnerGender,
@@ -300,7 +263,6 @@ export const sessionService = {
         startedAt: serverTimestamp(),
       });
 
-      // Récupérer la session mise à jour
       const updatedDoc = await sessionRef.get();
       const updatedSession: Session = {
         id: updatedDoc.id,
@@ -322,18 +284,11 @@ export const sessionService = {
     }
   },
 
-  // ----------------------------------------------------------
-  // RÉCUPÉRATION DE SESSION
-  // ----------------------------------------------------------
-
   /**
-   * Récupère une session par son code
-   *
-   * @param sessionCode - Code de la session
-   * @returns ApiResponse avec les données de la session
+   * Récupère une session
    */
-  async getSession(sessionCode: string): Promise<ApiResponse<Session>> {
-    const normalizedCode = this.normalizeSessionCode(sessionCode);
+  getSession: async (sessionCode: string): Promise<ApiResponse<Session>> => {
+    const normalizedCode = normalizeCode(sessionCode);
 
     try {
       const sessionDoc = await sessionsCollection().doc(normalizedCode).get();
@@ -364,47 +319,28 @@ export const sessionService = {
   },
 
   /**
-   * Vérifie si un utilisateur est membre d'une session
-   *
-   * @param session - Session à vérifier
-   * @param userId - UID de l'utilisateur
-   * @returns true si l'utilisateur est membre
+   * Vérifie si un utilisateur est membre
    */
-  isSessionMember(session: Session, userId: string): boolean {
-    return session.creatorId === userId || session.partnerId === userId;
+  isSessionMember: (session: Session, odfsdfhdjsud: string): boolean => {
+    return session.creatorId === odfsdfhdjsud || session.partnerId === odfsdfhdjsud;
   },
 
   /**
-   * Détermine le rôle d'un utilisateur dans une session
-   *
-   * @param session - Session
-   * @param userId - UID de l'utilisateur
-   * @returns Rôle de l'utilisateur ou null si pas membre
+   * Récupère le rôle d'un utilisateur
    */
-  getUserRole(session: Session, userId: string): PlayerRole | null {
-    if (session.creatorId === userId) return "creator";
-    if (session.partnerId === userId) return "partner";
-    return null;
+  getUserRole: (session: Session, odfsdfhdjsud: string): PlayerRole | null => {
+    return getUserRoleInSession(session, odfsdfhdjsud);
   },
 
-  // ----------------------------------------------------------
-  // ÉCOUTE EN TEMPS RÉEL
-  // ----------------------------------------------------------
-
   /**
-   * S'abonne aux changements d'une session en temps réel
-   *
-   * @param sessionCode - Code de la session
-   * @param onUpdate - Callback appelé à chaque mise à jour
-   * @param onError - Callback appelé en cas d'erreur
-   * @returns Fonction de désinscription
+   * S'abonne aux changements d'une session
    */
-  subscribeToSession(
+  subscribeToSession: (
     sessionCode: string,
     onUpdate: (session: Session) => void,
     onError?: (error: string) => void
-  ): () => void {
-    const normalizedCode = this.normalizeSessionCode(sessionCode);
+  ): (() => void) => {
+    const normalizedCode = normalizeCode(sessionCode);
 
     return sessionsCollection()
       .doc(normalizedCode)
@@ -427,27 +363,18 @@ export const sessionService = {
       );
   },
 
-  // ----------------------------------------------------------
-  // MISE À JOUR DU STATUT
-  // ----------------------------------------------------------
-
   /**
-   * Met à jour le statut d'une session
-   *
-   * @param sessionCode - Code de la session
-   * @param status - Nouveau statut
-   * @returns ApiResponse void
+   * Met à jour le statut
    */
-  async updateSessionStatus(
+  updateSessionStatus: async (
     sessionCode: string,
     status: SessionStatus
-  ): Promise<ApiResponse> {
-    const normalizedCode = this.normalizeSessionCode(sessionCode);
+  ): Promise<ApiResponse> => {
+    const normalizedCode = normalizeCode(sessionCode);
 
     try {
       const updateData: Partial<Session> = { status };
 
-      // Ajouter completedAt si la session est terminée
       if (status === "completed") {
         updateData.completedAt = serverTimestamp() as any;
       }
@@ -466,24 +393,15 @@ export const sessionService = {
     }
   },
 
-  // ----------------------------------------------------------
-  // COMPLÉTION DE DÉFI
-  // ----------------------------------------------------------
-
   /**
-   * Marque un défi comme accompli et passe au suivant
-   *
-   * @param sessionCode - Code de la session
-   * @param challengeIndex - Index du défi accompli
-   * @param userId - UID de l'utilisateur qui complète le défi
-   * @returns ApiResponse avec le prochain défi ou null si terminé
+   * Complète un défi
    */
-  async completeChallenge(
+  completeChallenge: async (
     sessionCode: string,
     challengeIndex: number,
-    userId: string
-  ): Promise<ApiResponse<SessionChallenge | null>> {
-    const normalizedCode = this.normalizeSessionCode(sessionCode);
+    odfsdfhdjsud: string
+  ): Promise<ApiResponse<SessionChallenge | null>> => {
+    const normalizedCode = normalizeCode(sessionCode);
 
     try {
       const sessionRef = sessionsCollection().doc(normalizedCode);
@@ -498,7 +416,6 @@ export const sessionService = {
 
       const session = sessionDoc.data() as Omit<Session, "id">;
 
-      // Vérification : la session est active
       if (session.status !== "active") {
         return {
           success: false,
@@ -506,7 +423,6 @@ export const sessionService = {
         };
       }
 
-      // Vérification : l'index est valide
       if (challengeIndex < 0 || challengeIndex >= session.challenges.length) {
         return {
           success: false,
@@ -514,7 +430,6 @@ export const sessionService = {
         };
       }
 
-      // Vérification : le défi n'est pas déjà accompli
       if (session.challenges[challengeIndex].completed) {
         return {
           success: false,
@@ -522,8 +437,7 @@ export const sessionService = {
         };
       }
 
-      // Vérification : c'est bien le tour de l'utilisateur
-      const userRole = this.getUserRole({ ...session, id: normalizedCode }, userId);
+      const userRole = getUserRoleInSession(session, odfsdfhdjsud);
       if (userRole !== session.currentPlayer) {
         return {
           success: false,
@@ -531,28 +445,24 @@ export const sessionService = {
         };
       }
 
-      // Mettre à jour le défi
       const updatedChallenges = [...session.challenges];
       updatedChallenges[challengeIndex] = {
         ...updatedChallenges[challengeIndex],
         completed: true,
-        completedBy: userId,
+        completedBy: odfsdfhdjsud,
         completedAt: firestore.Timestamp.now(),
       };
 
-      // Calculer le prochain index et joueur
       const nextIndex = challengeIndex + 1;
       const isLastChallenge = nextIndex >= session.challengeCount;
       const nextPlayer: PlayerRole = session.currentPlayer === "creator" ? "partner" : "creator";
 
-      // Préparer les données de mise à jour
       const updateData: Partial<Session> = {
         challenges: updatedChallenges,
         currentChallengeIndex: nextIndex,
         currentPlayer: nextPlayer,
       };
 
-      // Si c'est le dernier défi, marquer comme terminé
       if (isLastChallenge) {
         updateData.status = "completed";
         updateData.completedAt = serverTimestamp() as any;
@@ -562,7 +472,6 @@ export const sessionService = {
 
       console.log(`[SessionService] Challenge ${challengeIndex} completed in session ${sessionCode}`);
 
-      // Retourner le prochain défi ou null si terminé
       const nextChallenge = isLastChallenge ? null : updatedChallenges[nextIndex];
 
       return {
@@ -578,24 +487,15 @@ export const sessionService = {
     }
   },
 
-  // ----------------------------------------------------------
-  // CHANGEMENT DE DÉFI
-  // ----------------------------------------------------------
-
   /**
-   * Remplace le défi actuel par un autre (max 2 fois)
-   *
-   * @param sessionCode - Code de la session
-   * @param challengeIndex - Index du défi à remplacer
-   * @param newChallenge - Nouveau défi
-   * @returns ApiResponse void
+   * Échange un défi
    */
-  async swapChallenge(
+  swapChallenge: async (
     sessionCode: string,
     challengeIndex: number,
     newChallenge: SessionChallenge
-  ): Promise<ApiResponse> {
-    const normalizedCode = this.normalizeSessionCode(sessionCode);
+  ): Promise<ApiResponse> => {
+    const normalizedCode = normalizeCode(sessionCode);
 
     try {
       const sessionRef = sessionsCollection().doc(normalizedCode);
@@ -610,7 +510,6 @@ export const sessionService = {
 
       const session = sessionDoc.data() as Omit<Session, "id">;
 
-      // Vérification : l'index est valide
       if (challengeIndex < 0 || challengeIndex >= session.challenges.length) {
         return {
           success: false,
@@ -618,7 +517,6 @@ export const sessionService = {
         };
       }
 
-      // Mettre à jour le défi
       const updatedChallenges = [...session.challenges];
       updatedChallenges[challengeIndex] = newChallenge;
 
@@ -636,22 +534,14 @@ export const sessionService = {
     }
   },
 
-  // ----------------------------------------------------------
-  // ABANDON DE SESSION
-  // ----------------------------------------------------------
-
   /**
-   * Abandonne une session en cours
-   *
-   * @param sessionCode - Code de la session
-   * @param userId - UID de l'utilisateur qui abandonne
-   * @returns ApiResponse void
+   * Abandonne une session
    */
-  async abandonSession(
+  abandonSession: async (
     sessionCode: string,
-    userId: string
-  ): Promise<ApiResponse> {
-    const normalizedCode = this.normalizeSessionCode(sessionCode);
+    odfsdfhdjsud: string
+  ): Promise<ApiResponse> => {
+    const normalizedCode = normalizeCode(sessionCode);
 
     try {
       const sessionRef = sessionsCollection().doc(normalizedCode);
@@ -666,8 +556,7 @@ export const sessionService = {
 
       const session = sessionDoc.data() as Omit<Session, "id">;
 
-      // Vérification : l'utilisateur est membre de la session
-      if (session.creatorId !== userId && session.partnerId !== userId) {
+      if (session.creatorId !== odfsdfhdjsud && session.partnerId !== odfsdfhdjsud) {
         return {
           success: false,
           error: getSessionErrorMessage("NOT_SESSION_MEMBER"),
@@ -679,7 +568,7 @@ export const sessionService = {
         completedAt: serverTimestamp(),
       });
 
-      console.log(`[SessionService] Session ${sessionCode} abandoned by user ${userId}`);
+      console.log(`[SessionService] Session ${sessionCode} abandoned by user ${odfsdfhdjsud}`);
 
       return { success: true };
     } catch (error: any) {
@@ -691,22 +580,14 @@ export const sessionService = {
     }
   },
 
-  // ----------------------------------------------------------
-  // SUPPRESSION DE SESSION
-  // ----------------------------------------------------------
-
   /**
-   * Supprime une session (uniquement par le créateur si en attente)
-   *
-   * @param sessionCode - Code de la session
-   * @param userId - UID de l'utilisateur qui supprime
-   * @returns ApiResponse void
+   * Supprime une session
    */
-  async deleteSession(
+  deleteSession: async (
     sessionCode: string,
-    userId: string
-  ): Promise<ApiResponse> {
-    const normalizedCode = this.normalizeSessionCode(sessionCode);
+    odfsdfhdjsud: string
+  ): Promise<ApiResponse> => {
+    const normalizedCode = normalizeCode(sessionCode);
 
     try {
       const sessionRef = sessionsCollection().doc(normalizedCode);
@@ -721,15 +602,13 @@ export const sessionService = {
 
       const session = sessionDoc.data() as Omit<Session, "id">;
 
-      // Seul le créateur peut supprimer
-      if (session.creatorId !== userId) {
+      if (session.creatorId !== odfsdfhdjsud) {
         return {
           success: false,
           error: "Seul le créateur peut supprimer la session",
         };
       }
 
-      // Ne peut supprimer que si en attente ou abandonnée/terminée
       if (session.status === "active") {
         return {
           success: false,
@@ -751,27 +630,18 @@ export const sessionService = {
     }
   },
 
-  // ----------------------------------------------------------
-  // SESSIONS ACTIVES DE L'UTILISATEUR
-  // ----------------------------------------------------------
-
   /**
-   * Récupère les sessions actives d'un utilisateur (créateur ou partenaire)
-   *
-   * @param userId - UID de l'utilisateur
-   * @returns ApiResponse avec la liste des sessions
+   * Récupère les sessions actives
    */
-  async getActiveSessions(userId: string): Promise<ApiResponse<Session[]>> {
+  getActiveSessions: async (odfsdfhdjsud: string): Promise<ApiResponse<Session[]>> => {
     try {
-      // Sessions où l'utilisateur est créateur
       const creatorQuery = await sessionsCollection()
-        .where("creatorId", "==", userId)
+        .where("creatorId", "==", odfsdfhdjsud)
         .where("status", "in", ["waiting", "active"])
         .get();
 
-      // Sessions où l'utilisateur est partenaire
       const partnerQuery = await sessionsCollection()
-        .where("partnerId", "==", userId)
+        .where("partnerId", "==", odfsdfhdjsud)
         .where("status", "==", "active")
         .get();
 
@@ -785,7 +655,6 @@ export const sessionService = {
       });
 
       partnerQuery.docs.forEach((doc) => {
-        // Éviter les doublons (peu probable mais sécurité)
         if (!sessions.find((s) => s.id === doc.id)) {
           sessions.push({
             id: doc.id,
@@ -808,28 +677,22 @@ export const sessionService = {
   },
 
   /**
-   * Récupère l'historique des sessions terminées d'un utilisateur
-   *
-   * @param userId - UID de l'utilisateur
-   * @param limit - Nombre maximum de sessions à retourner
-   * @returns ApiResponse avec la liste des sessions
+   * Récupère l'historique
    */
-  async getSessionHistory(
-    userId: string,
+  getSessionHistory: async (
+    odfsdfhdjsud: string,
     limit: number = 10
-  ): Promise<ApiResponse<Session[]>> {
+  ): Promise<ApiResponse<Session[]>> => {
     try {
-      // Sessions terminées où l'utilisateur est créateur
       const creatorQuery = await sessionsCollection()
-        .where("creatorId", "==", userId)
+        .where("creatorId", "==", odfsdfhdjsud)
         .where("status", "in", ["completed", "abandoned"])
         .orderBy("completedAt", "desc")
         .limit(limit)
         .get();
 
-      // Sessions terminées où l'utilisateur est partenaire
       const partnerQuery = await sessionsCollection()
-        .where("partnerId", "==", userId)
+        .where("partnerId", "==", odfsdfhdjsud)
         .where("status", "in", ["completed", "abandoned"])
         .orderBy("completedAt", "desc")
         .limit(limit)
@@ -853,7 +716,6 @@ export const sessionService = {
         }
       });
 
-      // Trier par date de complétion et limiter
       sessions.sort((a, b) => {
         const dateA = a.completedAt?.toDate?.() || new Date(0);
         const dateB = b.completedAt?.toDate?.() || new Date(0);
@@ -873,9 +735,5 @@ export const sessionService = {
     }
   },
 };
-
-// ============================================================
-// EXPORT PAR DÉFAUT
-// ============================================================
 
 export default sessionService;
