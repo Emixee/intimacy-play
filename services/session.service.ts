@@ -7,6 +7,9 @@
  * - Rejoindre une session
  * - Synchronisation temps réel
  * - Progression des défis
+ * 
+ * FIX BUG COUPLES MÊME GENRE :
+ * La validation utilise maintenant forPlayer (rôle) au lieu de forGender
  */
 
 import { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
@@ -403,9 +406,9 @@ export const sessionService = {
   /**
    * Complète un défi
    *
-   * LOGIQUE : C'est le partenaire qui REÇOIT la preuve qui valide.
-   * - Si le défi est pour le créateur (son genre), c'est le partenaire qui valide
-   * - Si le défi est pour le partenaire (son genre), c'est le créateur qui valide
+   * FIX BUG COUPLES MÊME GENRE :
+   * La validation utilise forPlayer (rôle) au lieu de forGender (genre)
+   * Le validateur est l'OPPOSÉ de celui qui fait le défi (forPlayer)
    */
   completeChallenge: async (
     sessionCode: string,
@@ -449,8 +452,8 @@ export const sessionService = {
       }
 
       // ============================================================
-      // NOUVELLE LOGIQUE : Vérifier qui peut valider
-      // Le validateur est celui qui N'A PAS à faire le défi
+      // FIX BUG COUPLES MÊME GENRE
+      // Utilise forPlayer (rôle) au lieu de forGender (genre)
       // ============================================================
       const currentChallenge = session.challenges[challengeIndex];
       const userRole = getUserRoleInSession(session, odfsdfhdjsud);
@@ -462,11 +465,10 @@ export const sessionService = {
         };
       }
 
-      // Déterminer si le défi est pour le créateur (basé sur le genre)
-      const challengeForCreator = currentChallenge.forGender === session.creatorGender;
-
       // Le validateur est l'OPPOSÉ de celui qui fait le défi
-      const expectedValidator: PlayerRole = challengeForCreator ? "partner" : "creator";
+      // Si forPlayer = "creator", le validateur est "partner"
+      // Si forPlayer = "partner", le validateur est "creator"
+      const expectedValidator: PlayerRole = currentChallenge.forPlayer === "creator" ? "partner" : "creator";
 
       if (userRole !== expectedValidator) {
         return {
@@ -487,12 +489,9 @@ export const sessionService = {
       const nextIndex = challengeIndex + 1;
       const isLastChallenge = nextIndex >= session.challengeCount;
 
-      // Le prochain "currentPlayer" indique à qui est le prochain défi
+      // Le prochain "currentPlayer" = forPlayer du prochain défi
       const nextChallenge = isLastChallenge ? null : updatedChallenges[nextIndex];
-      const nextChallengeForCreator = nextChallenge
-        ? nextChallenge.forGender === session.creatorGender
-        : false;
-      const nextPlayer: PlayerRole = nextChallengeForCreator ? "creator" : "partner";
+      const nextPlayer: PlayerRole = nextChallenge ? nextChallenge.forPlayer : "creator";
 
       const updateData: Partial<Session> = {
         challenges: updatedChallenges,

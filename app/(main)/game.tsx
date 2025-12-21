@@ -4,8 +4,8 @@
  * Affiche le défi actuel et gère la progression de la partie.
  * Utilise useSession pour le temps réel et les actions.
  *
- * LOGIQUE :
- * - isChallengeForMe : Le défi est pour MOI → j'envoie la preuve
+ * LOGIQUE (FIX BUG couples même genre) :
+ * - isChallengeForMe : Basé sur forPlayer (rôle) → j'envoie la preuve
  * - isMyTurn : C'est mon tour de VALIDER → je valide après réception de la preuve
  */
 
@@ -37,6 +37,7 @@ import {
   ChallengeType,
   IntensityLevel,
   Gender,
+  PlayerRole,
   INTENSITY_LEVELS,
 } from "../../types";
 
@@ -80,13 +81,17 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 
 /**
  * Génère des défis alternatifs RÉELS depuis la base de données
+ * 
+ * FIX BUG COUPLES MÊME GENRE :
+ * Préserve forPlayer du défi original pour que le nouveau défi
+ * soit toujours attribué au même joueur (même rôle)
  */
 const generateAlternatives = (
   currentChallenge: SessionChallenge,
   usedTexts: string[],
   count: number = 2
 ): AlternativeChallenge[] => {
-  const { level, forGender } = currentChallenge;
+  const { level, forGender, forPlayer } = currentChallenge;
 
   // Construire la clé pour accéder aux défis
   const genderKey = forGender.toUpperCase() as "HOMME" | "FEMME";
@@ -111,6 +116,7 @@ const generateAlternatives = (
   const selected = shuffled.slice(0, count);
 
   // Convertir en SessionChallenge
+  // FIX: Préserver forPlayer du défi original !
   return selected.map((c: { text: string; type: ChallengeType; theme: string }, index: number) => ({
     id: `alt-${index}-${Date.now()}`,
     challenge: {
@@ -118,6 +124,7 @@ const generateAlternatives = (
       level,
       type: c.type,
       forGender,
+      forPlayer, // FIX BUG: Préserver le rôle du joueur !
       completed: false,
       completedBy: null,
       completedAt: null,

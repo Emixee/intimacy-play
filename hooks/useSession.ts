@@ -7,9 +7,9 @@
  * - Les computed values (isMyTurn, isChallengeForMe, currentChallenge, progress)
  * - Les actions (completeChallenge, skipChallenge, abandonSession)
  *
- * LOGIQUE DE VALIDATION :
- * - isMyTurn : C'est mon tour de VALIDER (le partenaire qui reçoit la preuve)
- * - isChallengeForMe : C'est MOI qui dois faire le défi actuel
+ * LOGIQUE DE VALIDATION (FIX BUG couples même genre) :
+ * - isChallengeForMe : Basé sur forPlayer (rôle) et NON sur forGender
+ * - isMyTurn : C'est mon tour de VALIDER = le défi n'est PAS pour moi
  */
 
 import { useEffect, useCallback, useRef, useState, useMemo } from "react";
@@ -184,19 +184,17 @@ export const useSession = ({
 
   /**
    * Est-ce que le défi actuel est pour MOI ?
-   * (Basé sur le genre du défi vs mon genre)
+   * 
+   * FIX BUG COUPLES MÊME GENRE :
+   * Utilise forPlayer (rôle) au lieu de forGender (genre)
+   * Cela fonctionne pour tous les types de couples !
    */
   const isChallengeForMe = useMemo((): boolean => {
     if (!currentSession || !myRole || !currentChallenge) return false;
 
-    // Déterminer mon genre
-    const myGender =
-      myRole === "creator"
-        ? currentSession.creatorGender
-        : currentSession.partnerGender;
-
-    // Le défi est pour moi si forGender correspond à mon genre
-    return currentChallenge.forGender === myGender;
+    // FIX: Utiliser forPlayer au lieu de comparer forGender avec mon genre
+    // forPlayer indique quel RÔLE doit faire ce défi
+    return currentChallenge.forPlayer === myRole;
   }, [currentSession, myRole, currentChallenge]);
 
   /**

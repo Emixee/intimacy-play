@@ -11,6 +11,9 @@
  * - Niveau 2 : 70 (35 homme + 35 femme)
  * - Niveau 3 : 163 (81 homme + 82 femme)
  * - Niveau 4 : 329 (161 homme + 168 femme)
+ * 
+ * FIX BUG COUPLES MÊME GENRE :
+ * Ajout de forPlayer dans SessionChallenge pour gérer les tours par RÔLE
  */
 
 import {
@@ -18,6 +21,7 @@ import {
   IntensityLevel,
   ChallengeType,
   SessionChallenge,
+  PlayerRole,
 } from "../types";
 
 // ============================================================
@@ -823,11 +827,19 @@ function calculateLevelDistribution(
 }
 
 // ============================================================
-// FONCTION PRINCIPALE DE SÉLECTION
+// FONCTION PRINCIPALE DE SÉLECTION (AVEC FIX forPlayer)
 // ============================================================
 
 /**
  * Sélectionne les défis pour une session de jeu
+ *
+ * FIX BUG COUPLES MÊME GENRE :
+ * - forGender : détermine le TEXTE du défi (contenu genré)
+ * - forPlayer : détermine QUI fait le défi ("creator" | "partner")
+ * 
+ * Avant le fix, la validation utilisait forGender, ce qui posait problème
+ * pour les couples homme/homme ou femme/femme car les deux joueurs avaient
+ * le même genre et ne pouvaient pas valider les défis de l'autre.
  *
  * @param creatorGender - Genre du créateur de la session
  * @param partnerGender - Genre du partenaire
@@ -869,7 +881,7 @@ export function selectChallenges(
     const creatorLevelCount = Math.ceil(levelCount / 2);
     const partnerLevelCount = levelCount - creatorLevelCount;
 
-    // Défis pour le créateur
+    // Défis pour le créateur (texte selon son genre, forPlayer = "creator")
     const creatorLevelChallenges = getRandomChallenges(
       level,
       creatorGender,
@@ -881,7 +893,8 @@ export function selectChallenges(
         text: challenge.text,
         level,
         type: challenge.type,
-        forGender: creatorGender,
+        forGender: creatorGender,    // Pour le contenu textuel
+        forPlayer: "creator",         // FIX: Pour la validation des tours
         completed: false,
         completedBy: null,
         completedAt: null,
@@ -889,7 +902,7 @@ export function selectChallenges(
       creatorRemaining--;
     }
 
-    // Défis pour le partenaire
+    // Défis pour le partenaire (texte selon son genre, forPlayer = "partner")
     const partnerLevelChallenges = getRandomChallenges(
       level,
       partnerGender,
@@ -901,7 +914,8 @@ export function selectChallenges(
         text: challenge.text,
         level,
         type: challenge.type,
-        forGender: partnerGender,
+        forGender: partnerGender,    // Pour le contenu textuel
+        forPlayer: "partner",         // FIX: Pour la validation des tours
         completed: false,
         completedBy: null,
         completedAt: null,

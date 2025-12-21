@@ -175,7 +175,13 @@ export interface SessionChallenge {
   text: string;
   level: IntensityLevel;
   type: ChallengeType;
+  /** Genre pour lequel le défi est écrit (contenu textuel) */
   forGender: Gender;
+  /** 
+   * Rôle du joueur qui doit FAIRE ce défi
+   * FIX BUG: Permet de gérer les couples de même genre
+   */
+  forPlayer: PlayerRole;
   completed: boolean;
   completedBy: string | null;
   completedAt: FirebaseFirestoreTypes.Timestamp | null;
