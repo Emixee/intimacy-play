@@ -42,7 +42,7 @@ import {
 
 /** Options de nombre de défis selon le statut premium */
 const CHALLENGE_COUNT_OPTIONS = {
-  free: [5, 10],
+  free: [5, 10, ],
   premium: [5, 10, 15, 20, 30, 40, 50],
 };
 

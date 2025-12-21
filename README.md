@@ -1,154 +1,97 @@
-# 💕 Intimacy Play
+# Fichiers à ajouter au projet intimacy-play
 
-> Application mobile de défis intimes pour couples à distance
+## 📦 Dépendances manquantes à installer
 
-![Expo SDK](https://img.shields.io/badge/Expo-SDK%2054-blue)
-![React Native](https://img.shields.io/badge/React%20Native-0.81-green)
-![Firebase](https://img.shields.io/badge/Firebase-21.x-orange)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
-![Platform](https://img.shields.io/badge/Platform-Android-brightgreen)
+Exécute ces commandes dans ton projet :
 
-## 📱 Description
-
-**Intimacy Play** est une application mobile Android permettant aux couples en relation à distance de renforcer leur intimité grâce à un système de défis progressifs et personnalisés.
-
-### Caractéristiques principales
-
-- 🎮 **648 défis** répartis sur 4 niveaux d'intensité
-- 👫 **Système de tour par tour** en temps réel
-- 🔥 **Progression graduelle** de l'intensité
-- 💎 **Modèle Freemium** (niveaux 1-2 gratuits, 3-4 premium)
-- 🔐 **Sécurisé** avec Firebase Authentication
-- ⚡ **Temps réel** avec Firestore
-
-## 🛠️ Stack Technique
-
-### Frontend
-- **Expo SDK 54** avec React Native 0.81
-- **TypeScript** strict
-- **Expo Router** (navigation file-based)
-- **NativeWind** (Tailwind CSS pour RN)
-- **Zustand** (state management)
-
-### Backend
-- **Firebase Authentication** (email/password)
-- **Cloud Firestore** (base de données temps réel)
-- **Firebase Cloud Messaging** (notifications push)
-- **Firebase Storage** (médias éphémères)
-
-## 📁 Structure du projet
-```
-intimacy-play/
-├── app/                    # Expo Router screens
-│   ├── (auth)/             # Écrans non-authentifiés
-│   │   ├── login.tsx
-│   │   ├── register.tsx
-│   │   └── forgot-password.tsx
-│   └── (main)/             # Écrans authentifiés
-│       ├── index.tsx       # Home
-│       ├── profile.tsx
-│       ├── create-session.tsx
-│       ├── join-session.tsx
-│       ├── waiting-room.tsx
-│       ├── game.tsx
-│       └── premium.tsx
-├── components/
-│   └── ui/                 # Composants réutilisables
-├── config/
-│   └── firebase.ts         # Configuration Firebase
-├── data/
-│   └── challenges.ts       # 648 défis
-├── hooks/                  # Hooks personnalisés
-├── services/               # Services Firebase
-├── stores/                 # Zustand stores
-├── theme/                  # Design tokens
-├── types/                  # Types TypeScript
-└── utils/                  # Utilitaires
-```
-
-## 🚀 Installation
-
-### Prérequis
-
-- Node.js 18+
-- npm ou yarn
-- Android Studio (pour l'émulateur)
-- Compte Firebase
-
-### Étapes
 ```bash
-# 1. Cloner le repo
-git clone https://github.com/Emixee/intimacy-play.git
-cd intimacy-play
+# Médias
+npx expo install expo-image-picker expo-av expo-file-system expo-media-library expo-sharing
 
-# 2. Installer les dépendances
-npm install
+# Animations
+npx expo install lottie-react-native
 
-# 3. Copier la configuration
-cp .env.example .env
+# IAP (In-App Purchases) - pour le premium
+npx expo install expo-in-app-purchases
 
-# 4. Ajouter google-services.json
-# Téléchargez depuis la console Firebase et placez à la racine
-
-# 5. Générer le build de développement
-npx expo prebuild
-
-# 6. Lancer sur Android
-npx expo run:android
+# Publicités Google (optionnel pour l'instant)
+npm install react-native-google-mobile-ads
 ```
 
-### Configuration Firebase
+## 📂 Fichiers à copier
 
-1. Créez un projet sur [Firebase Console](https://console.firebase.google.com)
-2. Activez Authentication (Email/Password)
-3. Créez une base Firestore
-4. Téléchargez `google-services.json`
-5. Placez-le à la racine du projet
+Copie ces fichiers/dossiers dans ton projet :
 
-## 📜 Scripts disponibles
-```bash
-# Développement
-npm start              # Démarrer Expo
-npm run android        # Lancer sur Android
+### utils/
+- `generateCode.ts` - Génération des codes de session
+- `challengeSelector.ts` - Algorithme de sélection des défis
 
-# Builds EAS
-npm run build:dev      # Build développement
-npm run build:preview  # Build preview (APK)
-npm run build:prod     # Build production (AAB)
+### components/ui/
+- `Modal.tsx` - Composant modal réutilisable
+- `PaywallModal.tsx` - Modal d'upgrade premium
 
-# Firebase
-npm run firebase:deploy:rules   # Déployer les règles Firestore
-npm run firebase:emulator       # Lancer l'émulateur local
+### components/chat/
+- `ChatBubble.tsx` - Bulle de message
+- `MediaMessage.tsx` - Message média (photo/vidéo/audio)
+- `ChatInput.tsx` - Champ de saisie du chat
+- `index.ts` - Exports
+
+### components/reactions/
+- `ReactionPicker.tsx` - Sélecteur d'emojis
+- `ReactionAnimation.tsx` - Animation des réactions
+- `ReactionOverlay.tsx` - Overlay global pour les réactions
+- `index.ts` - Exports
+
+### components/game/
+- `ChallengeCard.tsx` - Carte de défi
+- `IntensitySelector.tsx` - Sélecteur d'intensité
+- `ProgressBar.tsx` - Barre de progression
+- `TurnIndicator.tsx` - Indicateur de tour
+- `index.ts` - Exports
+
+## ⚙️ Mise à jour de components/ui/index.ts
+
+Ajoute ces exports dans `components/ui/index.ts` :
+
+```typescript
+export { Modal, ConfirmModal, AlertModal } from './Modal';
+export { PaywallModal } from './PaywallModal';
 ```
 
-## 🎨 Niveaux d'intensité
+## 🔧 Mise à jour du app.json
 
-| Niveau | Nom | Emoji | Accès |
-|--------|-----|-------|-------|
-| 1 | Romantique | 😇 | Gratuit |
-| 2 | Sensuel | 😊 | Gratuit |
-| 3 | Érotique | 😏 | Premium |
-| 4 | Explicite | 🔥 | Premium |
+Ajoute ces plugins si tu utilises les médias :
 
-## 💰 Modèle économique
+```json
+{
+  "plugins": [
+    [
+      "expo-image-picker",
+      {
+        "photosPermission": "Permet d'envoyer des photos à ton partenaire",
+        "cameraPermission": "Permet de prendre des photos pour les défis"
+      }
+    ],
+    [
+      "expo-av",
+      {
+        "microphonePermission": "Permet d'enregistrer des messages audio"
+      }
+    ]
+  ]
+}
+```
 
-- **Gratuit** : Niveaux 1-2, 3 parties/jour, 10 défis max
-- **Premium** : Tous les niveaux, illimité, 50 défis max
-  - Mensuel : 6,99€/mois
-  - Annuel : 39,99€/an (44% d'économie)
+## ✅ Checklist après installation
 
-## 🔐 Sécurité
+- [ ] `npm install` ou `yarn` pour installer les dépendances
+- [ ] Copier les nouveaux fichiers
+- [ ] Mettre à jour les index.ts
+- [ ] `npx expo prebuild` pour régénérer le projet natif
+- [ ] Tester avec `npx expo run:android`
 
-- Authentification Firebase sécurisée
-- Règles Firestore strictes
-- Pas de stockage de données sensibles
-- Médias éphémères (expiration 10 min)
-- Contenu 18+ uniquement
+## 📝 Notes
 
-## 📄 Licence
-
-Propriétaire - Tous droits réservés © 2024
-
----
-
-**Fait avec 💕 pour les couples à distance**
+- Ces composants utilisent NativeWind pour le styling
+- Ils importent les types depuis `../../types`
+- Certains composants nécessitent `expo-linear-gradient` et `@expo/vector-icons`
