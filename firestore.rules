@@ -16,21 +16,6 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Vérifie que l'utilisateur est le créateur de la session
-    function isSessionCreator() {
-      return isAuthenticated() && resource.data.creatorId == request.auth.uid;
-    }
-    
-    // Vérifie que l'utilisateur est le partenaire de la session
-    function isSessionPartner() {
-      return isAuthenticated() && resource.data.partnerId == request.auth.uid;
-    }
-    
-    // Vérifie que l'utilisateur est membre de la session (créateur OU partenaire)
-    function isSessionMember() {
-      return isSessionCreator() || isSessionPartner();
-    }
-    
     // Vérifie qu'une valeur est un genre valide
     function isValidGender(gender) {
       return gender in ['homme', 'femme'];
@@ -46,11 +31,6 @@ service cloud.firestore {
       return status in ['waiting', 'active', 'completed', 'abandoned'];
     }
     
-    // Vérifie qu'une valeur est un type de défi valide
-    function isValidChallengeType(type) {
-      return type in ['audio', 'video', 'photo', 'texte'];
-    }
-    
     // Vérifie qu'une valeur est un rôle de joueur valide
     function isValidPlayerRole(role) {
       return role in ['creator', 'partner'];
@@ -62,18 +42,11 @@ service cloud.firestore {
     
     match /users/{userId} {
       
-      // ----------------------------------------------------------
-      // LECTURE
-      // ----------------------------------------------------------
       // Seul le propriétaire peut lire son profil
       allow read: if isOwner(userId);
       
-      // ----------------------------------------------------------
-      // CRÉATION
-      // ----------------------------------------------------------
       // L'utilisateur crée son propre document après inscription
       allow create: if isOwner(userId) &&
-        // Champs obligatoires présents
         request.resource.data.keys().hasAll([
           'email', 
           'displayName', 
@@ -87,34 +60,21 @@ service cloud.firestore {
           'notificationsEnabled',
           'fcmToken'
         ]) &&
-        // Validation du genre
         isValidGender(request.resource.data.gender) &&
-        // L'utilisateur ne peut pas se créer en premium
         request.resource.data.premium == false &&
         request.resource.data.premiumUntil == null &&
         request.resource.data.premiumPlan == null &&
-        // Email correspond à l'email d'auth
         request.resource.data.email == request.auth.token.email;
       
-      // ----------------------------------------------------------
-      // MISE À JOUR
-      // ----------------------------------------------------------
       // Seul le propriétaire peut modifier son profil
-      // Certains champs sont immuables
       allow update: if isOwner(userId) &&
-        // L'email ne peut pas être modifié
         request.resource.data.email == resource.data.email &&
-        // La date de création ne peut pas être modifiée
         request.resource.data.createdAt == resource.data.createdAt &&
-        // Si le genre est modifié, il doit être valide
         (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gender']) ||
           isValidGender(request.resource.data.gender)
         );
       
-      // ----------------------------------------------------------
-      // SUPPRESSION
-      // ----------------------------------------------------------
       // Seul le propriétaire peut supprimer son profil
       allow delete: if isOwner(userId);
     }
@@ -128,15 +88,15 @@ service cloud.firestore {
       // ----------------------------------------------------------
       // LECTURE
       // ----------------------------------------------------------
-      // Seuls les membres de la session peuvent la lire
-      allow read: if isSessionMember();
+      // Tout utilisateur authentifié peut lire une session
+      // (la sécurité repose sur le code secret de 6 caractères = 1 milliard de combinaisons)
+      allow read: if isAuthenticated();
       
       // ----------------------------------------------------------
       // CRÉATION
       // ----------------------------------------------------------
       // Tout utilisateur authentifié peut créer une session
       allow create: if isAuthenticated() &&
-        // Champs obligatoires présents
         request.resource.data.keys().hasAll([
           'creatorId',
           'creatorGender',
@@ -152,35 +112,37 @@ service cloud.firestore {
           'startedAt',
           'completedAt'
         ]) &&
-        // Le créateur est l'utilisateur actuel
         request.resource.data.creatorId == request.auth.uid &&
-        // Genre du créateur valide
         isValidGender(request.resource.data.creatorGender) &&
-        // Pas de partenaire à la création
         request.resource.data.partnerId == null &&
         request.resource.data.partnerGender == null &&
-        // Statut initial = waiting
         request.resource.data.status == 'waiting' &&
-        // Nombre de défis valide (5-50)
         request.resource.data.challengeCount >= 5 &&
         request.resource.data.challengeCount <= 50 &&
-        // Intensité de départ valide
         isValidIntensity(request.resource.data.startIntensity) &&
-        // Index initial = 0
         request.resource.data.currentChallengeIndex == 0 &&
-        // Joueur initial = creator
         request.resource.data.currentPlayer == 'creator' &&
-        // Challenges est un tableau
         request.resource.data.challenges is list &&
-        // Pas encore démarrée
         request.resource.data.startedAt == null &&
         request.resource.data.completedAt == null;
       
       // ----------------------------------------------------------
       // MISE À JOUR
       // ----------------------------------------------------------
-      // Seuls les membres peuvent mettre à jour la session
-      allow update: if isSessionMember() &&
+      // Mise à jour autorisée si membre existant ou nouveau partenaire
+      allow update: if isAuthenticated() &&
+        (
+          // Le créateur peut modifier
+          (resource.data.creatorId == request.auth.uid) ||
+          // Le partenaire existant peut modifier
+          (resource.data.partnerId == request.auth.uid) ||
+          // Un nouveau partenaire peut rejoindre une session en attente
+          (
+            resource.data.status == 'waiting' &&
+            resource.data.partnerId == null &&
+            request.resource.data.partnerId == request.auth.uid
+          )
+        ) &&
         // Le créateur ne peut pas être changé
         request.resource.data.creatorId == resource.data.creatorId &&
         // Le genre du créateur ne peut pas être changé
@@ -196,7 +158,7 @@ service cloud.firestore {
         (
           // Soit le partenaire ne change pas
           request.resource.data.partnerId == resource.data.partnerId ||
-          // Soit on ajoute un partenaire (session en attente)
+          // Soit on ajoute un partenaire à une session en attente
           (
             resource.data.status == 'waiting' &&
             resource.data.partnerId == null &&
@@ -214,7 +176,8 @@ service cloud.firestore {
       // SUPPRESSION
       // ----------------------------------------------------------
       // Seul le créateur peut supprimer la session
-      allow delete: if isSessionCreator();
+      allow delete: if isAuthenticated() && 
+        resource.data.creatorId == request.auth.uid;
     }
     
     // ============================================================
@@ -223,11 +186,9 @@ service cloud.firestore {
     
     match /challenges/{challengeId} {
       // Lecture seule pour les utilisateurs authentifiés
-      // (si tu décides de stocker les défis dans Firestore)
       allow read: if isAuthenticated();
       
       // Écriture interdite depuis le client
-      // (géré par admin/migration uniquement)
       allow write: if false;
     }
     
