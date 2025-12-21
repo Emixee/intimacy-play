@@ -1,75 +1,49 @@
 /**
  * Layout racine de l'application
- * Gère l'initialisation Firebase et la redirection auth
+ *
+ * Gère :
+ * - L'initialisation de l'authentification
+ * - L'affichage du loading initial
+ * - La configuration globale de la navigation
  */
 
 import React, { useEffect } from "react";
-import { Stack } from "expo-router";
+import { Stack, SplashScreen } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
-import { auth, firestore } from "../config/firebase";
-import { useAuthStore } from "../stores/authStore";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { useAuth } from "../hooks/useAuth";
 import { LoadingScreen } from "../components/ui/LoadingSpinner";
-import { User } from "../types";
 
 import "../global.css";
 
+// Empêcher le splash screen de se cacher automatiquement
+SplashScreen.preventAutoHideAsync();
+
 export default function RootLayout() {
-  const {
-    setFirebaseUser,
-    setUserData,
-    setLoading,
-    setInitialized,
-    isLoading,
-    isInitialized,
-  } = useAuthStore();
+  const { isInitialized, isLoading } = useAuth();
 
+  // Cacher le splash screen quand l'auth est initialisée
   useEffect(() => {
-    const unsubscribeAuth = auth().onAuthStateChanged(async (firebaseUser) => {
-      console.log("Auth state changed:", firebaseUser?.uid || "null");
-      
-      setFirebaseUser(firebaseUser);
-      
-      if (firebaseUser) {
-        try {
-          const userDoc = await firestore()
-            .collection("users")
-            .doc(firebaseUser.uid)
-            .get();
-          
-          if (userDoc.exists) {
-            setUserData({
-              id: userDoc.id,
-              ...userDoc.data(),
-            } as User);
-          }
-        } catch (error) {
-          console.error("Error fetching user data:", error);
-        }
-      } else {
-        setUserData(null);
-      }
-      
-      setLoading(false);
-      setInitialized(true);
-    });
+    if (isInitialized) {
+      SplashScreen.hideAsync();
+    }
+  }, [isInitialized]);
 
-    return () => {
-      unsubscribeAuth();
-    };
-  }, []);
-
+  // Afficher le loading pendant l'initialisation
   if (!isInitialized || isLoading) {
     return (
-      <View className="flex-1 bg-pink-50">
-        <StatusBar style="dark" />
-        <LoadingScreen message="Chargement..." />
-      </View>
+      <SafeAreaProvider>
+        <View className="flex-1 bg-pink-50">
+          <StatusBar style="dark" />
+          <LoadingScreen message="Chargement..." />
+        </View>
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <>
+    <SafeAreaProvider>
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
@@ -78,10 +52,10 @@ export default function RootLayout() {
           animation: "slide_from_right",
         }}
       >
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(main)" />
-        <Stack.Screen name="index" />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="(main)" options={{ headerShown: false }} />
       </Stack>
-    </>
+    </SafeAreaProvider>
   );
 }

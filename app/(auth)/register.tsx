@@ -59,11 +59,7 @@ const parseDate = (dateString: string): Date | null => {
   if (parts.length !== 3) return null;
 
   const day = parseInt(parts[0], 10);
-<<<<<<< HEAD
   const month = parseInt(parts[1], 10) - 1;
-=======
-  const month = parseInt(parts[1], 10) - 1; // Les mois commencent à 0
->>>>>>> 8f200a3a33aefdc81cd9e58a5853ce2388ba6a27
   const year = parseInt(parts[2], 10);
 
   if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
@@ -73,10 +69,6 @@ const parseDate = (dateString: string): Date | null => {
 
   const date = new Date(year, month, day);
 
-<<<<<<< HEAD
-=======
-  // Vérifier que la date est valide
->>>>>>> 8f200a3a33aefdc81cd9e58a5853ce2388ba6a27
   if (
     date.getDate() !== day ||
     date.getMonth() !== month ||
@@ -110,19 +102,9 @@ const calculateAge = (birthDate: Date): number => {
  * Formate l'input de date (ajoute les / automatiquement)
  */
 const formatDateInput = (text: string): string => {
-<<<<<<< HEAD
   const numbers = text.replace(/\D/g, "");
   const limited = numbers.slice(0, 8);
 
-=======
-  // Supprimer tout ce qui n'est pas un chiffre
-  const numbers = text.replace(/\D/g, "");
-
-  // Limiter à 8 chiffres
-  const limited = numbers.slice(0, 8);
-
-  // Ajouter les /
->>>>>>> 8f200a3a33aefdc81cd9e58a5853ce2388ba6a27
   if (limited.length <= 2) {
     return limited;
   } else if (limited.length <= 4) {
@@ -250,34 +232,13 @@ export default function RegisterScreen() {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-<<<<<<< HEAD
   }, [email, password, confirmPassword, gender, dateOfBirthString, termsAccepted]);
-=======
-  }, [
-    email,
-    password,
-    confirmPassword,
-    gender,
-    dateOfBirthString,
-    termsAccepted,
-  ]);
-
-  // ----------------------------------------------------------
-  // HANDLERS
-  // ----------------------------------------------------------
->>>>>>> 8f200a3a33aefdc81cd9e58a5853ce2388ba6a27
 
   const handleRegister = useCallback(async () => {
     if (!validateForm()) return;
 
     const dateOfBirth = parseDate(dateOfBirthString);
-<<<<<<< HEAD
     if (!gender || !dateOfBirth) return;
-=======
-    if (!gender || !dateOfBirth) {
-      return;
-    }
->>>>>>> 8f200a3a33aefdc81cd9e58a5853ce2388ba6a27
 
     setIsSubmitting(true);
     setErrors({});
@@ -291,13 +252,7 @@ export default function RegisterScreen() {
         dateOfBirth,
       });
 
-<<<<<<< HEAD
       if (!result.success) {
-=======
-      if (result.success) {
-        console.log("[RegisterScreen] Registration successful");
-      } else {
->>>>>>> 8f200a3a33aefdc81cd9e58a5853ce2388ba6a27
         setErrors({ general: result.error || "Erreur d'inscription" });
       }
     } catch (error: any) {
@@ -307,7 +262,6 @@ export default function RegisterScreen() {
     }
   }, [email, password, gender, dateOfBirthString, register, validateForm]);
 
-<<<<<<< HEAD
   const handleDateChange = useCallback((text: string) => {
     const formatted = formatDateInput(text);
     setDateOfBirthString(formatted);
@@ -322,28 +276,6 @@ export default function RegisterScreen() {
       setErrors((prev) => ({ ...prev, gender: undefined }));
     }
   }, [errors.gender]);
-=======
-  const handleDateChange = useCallback(
-    (text: string) => {
-      const formatted = formatDateInput(text);
-      setDateOfBirthString(formatted);
-      if (errors.dateOfBirth) {
-        setErrors((prev) => ({ ...prev, dateOfBirth: undefined }));
-      }
-    },
-    [errors.dateOfBirth]
-  );
-
-  const handleGenderSelect = useCallback(
-    (selectedGender: Gender) => {
-      setGender(selectedGender);
-      if (errors.gender) {
-        setErrors((prev) => ({ ...prev, gender: undefined }));
-      }
-    },
-    [errors.gender]
-  );
->>>>>>> 8f200a3a33aefdc81cd9e58a5853ce2388ba6a27
 
   const handleTermsToggle = useCallback(() => {
     setTermsAccepted((prev) => !prev);
@@ -481,11 +413,7 @@ export default function RegisterScreen() {
               )}
             </View>
 
-<<<<<<< HEAD
             {/* Date de naissance */}
-=======
-            {/* Date de naissance (TextInput) */}
->>>>>>> 8f200a3a33aefdc81cd9e58a5853ce2388ba6a27
             <Input
               label="Date de naissance"
               placeholder="JJ/MM/AAAA"
@@ -495,10 +423,6 @@ export default function RegisterScreen() {
               leftIcon="calendar-outline"
               keyboardType="number-pad"
               maxLength={10}
-<<<<<<< HEAD
-=======
-              returnKeyType="next"
->>>>>>> 8f200a3a33aefdc81cd9e58a5853ce2388ba6a27
               editable={!isButtonDisabled}
               containerClassName="mb-2"
               hint={`Vous devez avoir au moins ${MIN_AGE} ans`}

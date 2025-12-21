@@ -1,17 +1,23 @@
 /**
  * Layout pour les écrans d'authentification
- * Redirige vers (main) si déjà connecté
+ *
+ * Redirige vers (main) si l'utilisateur est déjà connecté
  */
 
-import { Stack, Redirect } from "expo-router";
+import { useEffect } from "react";
+import { Stack, router } from "expo-router";
 import { useAuthStore } from "../../stores/authStore";
 
 export default function AuthLayout() {
   const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
 
-  if (firebaseUser) {
-    return <Redirect href="/(main)" />;
-  }
+  useEffect(() => {
+    // Rediriger si connecté
+    if (isInitialized && firebaseUser) {
+      router.replace("/(main)");
+    }
+  }, [firebaseUser, isInitialized]);
 
   return (
     <Stack
@@ -21,9 +27,24 @@ export default function AuthLayout() {
         animation: "slide_from_right",
       }}
     >
-      <Stack.Screen name="login" />
-      <Stack.Screen name="register" />
-      <Stack.Screen name="forgot-password" />
+      <Stack.Screen
+        name="login"
+        options={{
+          title: "Connexion",
+        }}
+      />
+      <Stack.Screen
+        name="register"
+        options={{
+          title: "Inscription",
+        }}
+      />
+      <Stack.Screen
+        name="forgot-password"
+        options={{
+          title: "Mot de passe oublié",
+        }}
+      />
     </Stack>
   );
 }
