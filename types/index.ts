@@ -1,8 +1,8 @@
 /**
  * Types TypeScript pour Intimacy Play
  * 
- * Aligné avec FIRESTORE-SCHEMA.md
- * Tous les types pour User, Couple, Session, Message, Challenge
+ * Aligné avec le code existant ET FIRESTORE-SCHEMA.md
+ * Compatible avec services/session.service.ts, hooks/useSession.ts, etc.
  */
 
 import { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
@@ -227,9 +227,12 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
 
 /**
  * Document utilisateur Firestore
- * Chemin: /users/{userId}
+ * Chemin: /users/{odfsdfhdjsud}
  */
 export interface User {
+  /** ID Firestore (= Firebase Auth UID) */
+  id: string;
+
   // Identité
   email: string;
   displayName: string;
@@ -265,11 +268,6 @@ export interface CreateUserData {
   dateOfBirth: Date;
 }
 
-/** User avec ID (après lecture Firestore) */
-export interface UserWithId extends User {
-  id: string;
-}
-
 // ============================================================
 // COUPLE
 // ============================================================
@@ -279,6 +277,9 @@ export interface UserWithId extends User {
  * Chemin: /couples/{coupleId}
  */
 export interface Couple {
+  /** ID Firestore */
+  id: string;
+
   // Partenaires
   user1Id: string;
   user2Id: string | null;
@@ -299,82 +300,15 @@ export interface Couple {
   unlinkedAt: Timestamp | null;
 }
 
-/** Couple avec ID */
-export interface CoupleWithId extends Couple {
-  id: string;
-}
-
 // ============================================================
-// SESSION
+// SESSION CHALLENGE (simplifié, compatible avec data/challenges.ts)
 // ============================================================
-
-/**
- * Document session Firestore
- * Chemin: /sessions/{sessionCode}
- */
-export interface Session {
-  // Référence couple (optionnel si mode sans compte couple)
-  coupleId: string | null;
-
-  // Participants
-  creatorId: string;
-  creatorGender: Gender;
-  partnerId: string | null;
-  partnerGender: Gender | null;
-
-  // État de la session
-  status: SessionStatus;
-
-  // Configuration
-  challengeCount: number;
-  startIntensity: IntensityLevel;
-  selectedThemes: Theme[];
-  includeToys: boolean;
-
-  // Progression
-  currentChallengeIndex: number;
-  currentPlayer: PlayerRole;
-
-  // Changements de défi
-  changesUsed: {
-    creator: number;
-    partner: number;
-  };
-  changesFromAds: {
-    creator: number;
-    partner: number;
-  };
-
-  // Défis
-  challenges: SessionChallenge[];
-
-  // Défi alternatif créé par partenaire
-  pendingPartnerChallenge: PartnerChallenge | null;
-
-  // Réactions actives (affichées temporairement)
-  activeReactions: SessionReaction[];
-
-  // Timestamps
-  createdAt: Timestamp;
-  startedAt: Timestamp | null;
-  completedAt: Timestamp | null;
-
-  // Publicité vue au démarrage (gratuit)
-  adWatchedAtStart: boolean;
-}
-
-/** Session avec code (ID = code) */
-export interface SessionWithCode extends Session {
-  code: string;
-}
 
 /**
  * Défi dans une session
+ * Compatible avec la structure utilisée dans data/challenges.ts
  */
 export interface SessionChallenge {
-  /** ID unique du défi */
-  id: string;
-  
   /** Texte du défi */
   text: string;
   
@@ -393,15 +327,6 @@ export interface SessionChallenge {
    */
   forPlayer: PlayerRole;
   
-  /** Thème du défi */
-  theme: Theme;
-  
-  /** Le défi implique-t-il un jouet ? */
-  hasToy: boolean;
-  
-  /** Nom du jouet si applicable */
-  toyName: Toy | null;
-  
   /** Défi complété ? */
   completed: boolean;
   
@@ -410,39 +335,58 @@ export interface SessionChallenge {
   
   /** Date de complétion */
   completedAt: Timestamp | null;
-  
-  /** Défi passé/ignoré ? */
-  skipped: boolean;
-  
-  /** Créé par le partenaire (défi personnalisé) ? */
-  createdByPartner: boolean;
 }
 
+// ============================================================
+// SESSION
+// ============================================================
+
 /**
- * Défi personnalisé créé par le partenaire
+ * Document session Firestore
+ * Chemin: /sessions/{sessionCode}
+ * 
+ * Compatible avec session.service.ts et useSession.ts
  */
-export interface PartnerChallenge {
-  text: string;
-  createdBy: string;
+export interface Session {
+  /** ID Firestore (= sessionCode normalisé) */
+  id: string;
+
+  // Participants
+  creatorId: string;
+  creatorGender: Gender;
+  partnerId: string | null;
+  partnerGender: Gender | null;
+
+  // État de la session
+  status: SessionStatus;
+
+  // Configuration
+  challengeCount: number;
+  startIntensity: IntensityLevel;
+
+  // Progression
+  currentChallengeIndex: number;
+  currentPlayer: PlayerRole;
+
+  // Défis
+  challenges: SessionChallenge[];
+
+  // Compteurs de changements (structure FLAT - compatible avec le code existant)
+  creatorChangesUsed: number;
+  partnerChangesUsed: number;
+  creatorBonusChanges: number;
+  partnerBonusChanges: number;
+
+  // Timestamps
   createdAt: Timestamp;
-  forChallengeIndex: number;
-}
-
-/**
- * Réaction envoyée pendant la session
- */
-export interface SessionReaction {
-  emoji: Reaction;
-  sentBy: string;
-  sentAt: Timestamp;
+  startedAt: Timestamp | null;
+  completedAt: Timestamp | null;
 }
 
 /** Données pour créer une nouvelle session */
 export interface CreateSessionData {
   challengeCount: number;
   startIntensity: IntensityLevel;
-  selectedThemes?: Theme[];
-  includeToys?: boolean;
 }
 
 // ============================================================
@@ -494,14 +438,11 @@ export interface CreateMessageData {
  * Utilisé pour générer les SessionChallenge
  */
 export interface ChallengeTemplate {
-  id?: string;
   text: string;
   level: IntensityLevel;
   gender: Gender;
   type: ChallengeType;
   theme: string;
-  hasToy?: boolean;
-  toyName?: Toy | null;
 }
 
 // ============================================================
@@ -510,7 +451,7 @@ export interface ChallengeTemplate {
 
 /** État de l'authentification */
 export interface AuthState {
-  user: UserWithId | null;
+  user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -542,18 +483,13 @@ export interface ApiResponse<T = void> {
 }
 
 // ============================================================
-// GAME STATE
+// GAME TYPES (pour game.tsx)
 // ============================================================
 
-/** État du jeu (store Zustand) */
-export interface GameState {
-  session: SessionWithCode | null;
-  currentChallenge: SessionChallenge | null;
-  isMyTurn: boolean;
-  changesRemaining: number;
-  bonusChangesRemaining: number;
-  isLoading: boolean;
-  error: string | null;
+/** Défi alternatif pour le changement */
+export interface AlternativeChallenge {
+  id: string;
+  challenge: SessionChallenge;
 }
 
 // ============================================================
@@ -587,6 +523,3 @@ export type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type DeepPartial<T> = {
   [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
-
-/** Exclut null et undefined d'un type */
-export type NonNullable<T> = T extends null | undefined ? never : T;

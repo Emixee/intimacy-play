@@ -260,15 +260,17 @@ export const getIntensityBackground = (level: 1 | 2 | 3 | 4): string => {
 
 /**
  * Récupère une shade de la palette primaire (rose)
+ * Compatible avec theme/index.ts
  */
-export const getPrimaryShade = (shade: PinkShade = 600): string => {
+export const getPrimaryColor = (shade: PinkShade = 600): string => {
   return pink[shade];
 };
 
 /**
  * Récupère une shade de gris
+ * Compatible avec theme/index.ts
  */
-export const getGrayShade = (shade: GrayShade = 500): string => {
+export const getGrayColor = (shade: GrayShade = 500): string => {
   return gray[shade];
 };
 
@@ -277,8 +279,8 @@ export const getGrayShade = (shade: GrayShade = 500): string => {
  * basé sur la luminosité du background
  */
 export const getContrastText = (bgColor: string): string => {
-  // Couleurs qui nécessitent un texte blanc
-  const darkBgs = [
+  // Liste des couleurs foncées qui nécessitent un texte blanc
+  const darkColors = [
     pink[600], pink[700], pink[800], pink[900],
     gray[700], gray[800], gray[900],
     intensity[1].main, intensity[1].dark,
@@ -289,7 +291,12 @@ export const getContrastText = (bgColor: string): string => {
     semantic.warning.main, semantic.info.main,
   ];
   
-  return darkBgs.includes(bgColor) ? base.white : gray[900];
+  // Vérifier si bgColor est dans la liste des couleurs foncées
+  if (darkColors.some(color => color === bgColor)) {
+    return base.white;
+  }
+  
+  return gray[900];
 };
 
 // ============================================================
