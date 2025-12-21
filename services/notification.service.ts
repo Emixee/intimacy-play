@@ -9,7 +9,7 @@
  */
 
 import { Platform, PermissionsAndroid, Alert } from "react-native";
-import messaging from "@react-native-firebase/messaging";
+import messaging, { FirebaseMessagingTypes } from "@react-native-firebase/messaging";
 import notifee, { AndroidImportance } from "@notifee/react-native";
 
 import { userService } from "./user.service";
@@ -22,6 +22,16 @@ import { ApiResponse } from "../types";
 const CHANNEL_ID = "game_notifications";
 const CHANNEL_NAME = "Notifications de jeu";
 const CHANNEL_DESCRIPTION = "Notifications pour les sessions de jeu";
+
+// ============================================================
+// TYPES
+// ============================================================
+
+interface NotificationData {
+  type?: string;
+  sessionId?: string;
+  [key: string]: string | undefined;
+}
 
 // ============================================================
 // SERVICE
@@ -220,7 +230,7 @@ export const notificationService = {
         "[NotificationService] Notification opened from background:",
         remoteMessage
       );
-      this.handleNotificationNavigation(remoteMessage.data);
+      this.handleNotificationNavigation(remoteMessage.data as NotificationData);
     });
 
     // Vérifier si l'app a été ouverte depuis une notification (killed state)
@@ -232,7 +242,7 @@ export const notificationService = {
             "[NotificationService] App opened from notification:",
             remoteMessage
           );
-          this.handleNotificationNavigation(remoteMessage.data);
+          this.handleNotificationNavigation(remoteMessage.data as NotificationData);
         }
       });
   },
@@ -240,7 +250,7 @@ export const notificationService = {
   /**
    * Gère la navigation après clic sur notification
    */
-  handleNotificationNavigation(data: { [key: string]: string } | undefined): void {
+  handleNotificationNavigation(data: NotificationData | undefined): void {
     if (!data) return;
 
     // Si c'est une notification "partner_joined", naviguer vers le jeu

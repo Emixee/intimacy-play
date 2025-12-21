@@ -2,21 +2,22 @@
  * Cloud Functions pour Intimacy Play
  *
  * Fonctions :
- * - onPartnerJoined : Envoie une notification push au créateur quand le partenaire rejoint
+ * - onPartnerJoined : Envoie une notification push au créateur
+ *   quand le partenaire rejoint
  */
 
-import { setGlobalOptions } from "firebase-functions";
-import { onDocumentUpdated } from "firebase-functions/v2/firestore";
+import {setGlobalOptions} from "firebase-functions";
+import {onDocumentUpdated} from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
-import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { getMessaging } from "firebase-admin/messaging";
+import {initializeApp} from "firebase-admin/app";
+import {getFirestore} from "firebase-admin/firestore";
+import {getMessaging} from "firebase-admin/messaging";
 
 // Initialiser Firebase Admin
 initializeApp();
 
 // Limite globale des instances (contrôle des coûts)
-setGlobalOptions({ maxInstances: 10, region: "europe-west1" });
+setGlobalOptions({maxInstances: 10, region: "europe-west3"});
 
 // Références
 const db = getFirestore();
@@ -33,7 +34,7 @@ interface Session {
   challengeCount: number;
 }
 
-interface User {
+interface UserDoc {
   displayName: string;
   fcmToken: string | null;
   notificationsEnabled: boolean;
@@ -60,7 +61,7 @@ export const onPartnerJoined = onDocumentUpdated(
     const afterData = event.data?.after.data() as Session | undefined;
 
     if (!beforeData || !afterData) {
-      logger.warn(`[onPartnerJoined] No data for session ${sessionId}`);
+      logger.warn("[onPartnerJoined] No data for session", {sessionId});
       return;
     }
 
@@ -73,10 +74,11 @@ export const onPartnerJoined = onDocumentUpdated(
       return;
     }
 
-    logger.info(
-      `[onPartnerJoined] Partner joined session ${sessionId}`,
-      { creatorId: afterData.creatorId, partnerId: afterData.partnerId }
-    );
+    logger.info("[onPartnerJoined] Partner joined session", {
+      sessionId,
+      creatorId: afterData.creatorId,
+      partnerId: afterData.partnerId,
+    });
 
     try {
       // Récupérer les infos du créateur (pour le token FCM)
@@ -86,46 +88,51 @@ export const onPartnerJoined = onDocumentUpdated(
         .get();
 
       if (!creatorDoc.exists) {
-        logger.warn(
-          `[onPartnerJoined] Creator not found: ${afterData.creatorId}`
-        );
+        logger.warn("[onPartnerJoined] Creator not found", {
+          creatorId: afterData.creatorId,
+        });
         return;
       }
 
-      const creator = creatorDoc.data() as User;
+      const creator = creatorDoc.data() as UserDoc;
 
       // Vérifier si le créateur a les notifications activées
       if (!creator.notificationsEnabled) {
-        logger.info(
-          `[onPartnerJoined] Creator has notifications disabled`
-        );
+        logger.info("[onPartnerJoined] Creator has notifications disabled");
         return;
       }
 
       // Vérifier si le créateur a un token FCM
       if (!creator.fcmToken) {
-        logger.warn(
-          `[onPartnerJoined] Creator has no FCM token: ${afterData.creatorId}`
-        );
+        logger.warn("[onPartnerJoined] Creator has no FCM token", {
+          creatorId: afterData.creatorId,
+        });
         return;
       }
 
       // Récupérer le nom du partenaire
-      const partnerDoc = await db
-        .collection("users")
-        .doc(afterData.partnerId!)
-        .get();
+      const partnerId = afterData.partnerId;
+      let partnerName = "Votre partenaire";
 
-      const partnerName = partnerDoc.exists
-        ? (partnerDoc.data() as User).displayName
-        : "Votre partenaire";
+      if (partnerId) {
+        const partnerDoc = await db.collection("users").doc(partnerId).get();
+        if (partnerDoc.exists) {
+          const partnerData = partnerDoc.data() as UserDoc;
+          partnerName = partnerData.displayName || partnerName;
+        }
+      }
+
+      // Construire le body du message
+      const bodyText =
+        `${partnerName} a rejoint la partie. ` +
+        `${afterData.challengeCount} défis vous attendent !`;
 
       // Construire la notification
       const message = {
         token: creator.fcmToken,
         notification: {
           title: "💕 C'est parti !",
-          body: `${partnerName} a rejoint la partie. ${afterData.challengeCount} défis vous attendent !`,
+          body: bodyText,
         },
         data: {
           type: "partner_joined",
@@ -143,21 +150,12 @@ export const onPartnerJoined = onDocumentUpdated(
       // Envoyer la notification
       const response = await messaging.send(message);
 
-      logger.info(
-        `[onPartnerJoined] Notification sent successfully`,
-        { messageId: response, sessionId }
-      );
+      logger.info("[onPartnerJoined] Notification sent successfully", {
+        messageId: response,
+        sessionId,
+      });
     } catch (error) {
-      logger.error(`[onPartnerJoined] Error sending notification`, error);
+      logger.error("[onPartnerJoined] Error sending notification", {error});
     }
   }
 );
-
-// ============================================================
-// FONCTION : Nettoyage des sessions expirées (optionnel)
-// ============================================================
-
-// À implémenter plus tard si besoin avec onSchedule
-// export const cleanupExpiredSessions = onSchedule("every 24 hours", async () => {
-//   // Supprimer les sessions "waiting" créées il y a plus de 24h
-// });

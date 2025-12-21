@@ -6,7 +6,7 @@
  * - Connexion avec mise à jour lastLogin
  * - Déconnexion
  * - Réinitialisation de mot de passe
- * - Suppression de compte RGPD complète (user, couple, sessions)
+ * - Suppression de compte RGPD complète (user, sessions)
  * - Listener d'état d'authentification
  *
  * ⚠️ IMPORTANT: Le document utilisateur doit inclure le champ 'preferences'
@@ -16,11 +16,9 @@
 import { FirebaseAuthTypes } from "@react-native-firebase/auth";
 import {
   auth,
-  firestore,
   serverTimestamp,
   toTimestamp,
   usersCollection,
-  couplesCollection,
   sessionsCollection,
 } from "../config/firebase";
 import {
@@ -178,9 +176,6 @@ export const authService = {
         displayName,
         gender,
         dateOfBirth: toTimestamp(dateOfBirth),
-        // Couple (null par défaut)
-        coupleId: null,
-        partnerNickname: null,
         // Premium (false par défaut)
         premium: false,
         premiumUntil: null,
@@ -456,9 +451,8 @@ export const authService = {
    * 
    * Ordre de suppression :
    * 1. Sessions où l'utilisateur est créateur ou partenaire
-   * 2. Couple lié à l'utilisateur
-   * 3. Document utilisateur Firestore
-   * 4. Compte Firebase Auth
+   * 2. Document utilisateur Firestore
+   * 3. Compte Firebase Auth
    *
    * @returns ApiResponse void
    */
@@ -475,11 +469,7 @@ export const authService = {
       const uid = currentUser.uid;
       console.log("[AuthService] Starting RGPD account deletion for:", uid);
 
-      // 1. Récupérer les données utilisateur pour connaître le coupleId
-      const userDoc = await usersCollection().doc(uid).get();
-      const userData = userDoc.data() as Omit<User, "id"> | undefined;
-
-      // 2. Supprimer les sessions où l'utilisateur est créateur
+      // 1. Supprimer les sessions où l'utilisateur est créateur
       const creatorSessionsSnapshot = await sessionsCollection()
         .where("creatorId", "==", uid)
         .get();
@@ -494,7 +484,7 @@ export const authService = {
         console.log("[AuthService] Deleted session (creator):", sessionDoc.id);
       }
 
-      // 3. Supprimer les sessions où l'utilisateur est partenaire
+      // 2. Supprimer les sessions où l'utilisateur est partenaire
       const partnerSessionsSnapshot = await sessionsCollection()
         .where("partnerId", "==", uid)
         .get();
@@ -509,73 +499,11 @@ export const authService = {
         console.log("[AuthService] Deleted session (partner):", sessionDoc.id);
       }
 
-      // 4. Supprimer le couple si l'utilisateur en a un
-      if (userData?.coupleId) {
-        const coupleDoc = await couplesCollection().doc(userData.coupleId).get();
-        
-        if (coupleDoc.exists) {
-          const coupleData = coupleDoc.data();
-          
-          // Mettre à jour le partenaire (retirer le coupleId)
-          const partnerId = coupleData?.user1Id === uid 
-            ? coupleData?.user2Id 
-            : coupleData?.user1Id;
-
-          if (partnerId) {
-            await usersCollection().doc(partnerId).update({
-              coupleId: null,
-              partnerNickname: null,
-            });
-            console.log("[AuthService] Updated partner:", partnerId);
-          }
-
-          // Supprimer le document couple
-          await couplesCollection().doc(userData.coupleId).delete();
-          console.log("[AuthService] Deleted couple:", userData.coupleId);
-        }
-      }
-
-      // 5. Supprimer les couples où l'utilisateur est user1Id ou user2Id
-      // (au cas où le coupleId n'est pas synchronisé)
-      const couplesAsUser1 = await couplesCollection()
-        .where("user1Id", "==", uid)
-        .get();
-      
-      for (const coupleDoc of couplesAsUser1.docs) {
-        // Nettoyer le partenaire
-        const coupleData = coupleDoc.data();
-        if (coupleData?.user2Id) {
-          await usersCollection().doc(coupleData.user2Id).update({
-            coupleId: null,
-            partnerNickname: null,
-          });
-        }
-        await coupleDoc.ref.delete();
-        console.log("[AuthService] Deleted couple (as user1):", coupleDoc.id);
-      }
-
-      const couplesAsUser2 = await couplesCollection()
-        .where("user2Id", "==", uid)
-        .get();
-      
-      for (const coupleDoc of couplesAsUser2.docs) {
-        // Nettoyer le partenaire
-        const coupleData = coupleDoc.data();
-        if (coupleData?.user1Id) {
-          await usersCollection().doc(coupleData.user1Id).update({
-            coupleId: null,
-            partnerNickname: null,
-          });
-        }
-        await coupleDoc.ref.delete();
-        console.log("[AuthService] Deleted couple (as user2):", coupleDoc.id);
-      }
-
-      // 6. Supprimer le document utilisateur Firestore
+      // 3. Supprimer le document utilisateur Firestore
       await usersCollection().doc(uid).delete();
       console.log("[AuthService] Deleted user document:", uid);
 
-      // 7. Supprimer le compte Firebase Auth (en dernier)
+      // 4. Supprimer le compte Firebase Auth (en dernier)
       await currentUser.delete();
       console.log("[AuthService] Deleted Firebase Auth account:", uid);
 
