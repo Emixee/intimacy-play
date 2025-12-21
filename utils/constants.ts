@@ -1,5 +1,13 @@
 /**
- * Constantes globales de l'application Intimacy Play
+ * Constantes globales - Intimacy Play
+ * 
+ * Contient toutes les constantes de configuration de l'application :
+ * - App info
+ * - Limites de session
+ * - Thèmes et jouets
+ * - Réactions
+ * - Pricing premium
+ * - Messages d'erreur
  */
 
 // ============================================================
@@ -8,88 +16,425 @@
 
 export const APP_NAME = "Intimacy Play";
 export const APP_VERSION = "1.0.0";
+export const APP_PACKAGE = "com.intimacyplay.app";
 
 // ============================================================
-// LIMITES DE SESSION
+// RÉACTIONS
 // ============================================================
 
-export const MIN_CHALLENGES = 5;
-export const MAX_CHALLENGES_FREE = 15;
-export const MAX_CHALLENGES_PREMIUM = 50;
-export const DEFAULT_CHALLENGE_COUNT = 10;
+/** Réactions gratuites disponibles pour tous */
+export const REACTIONS_FREE = ["❤️", "🔥", "😍", "👏"] as const;
 
-export const SESSION_CODE_LENGTH = 6;
-export const SESSION_CODE_CHARACTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+/** Réactions premium (abonnés uniquement) */
+export const REACTIONS_PREMIUM = ["🥵", "💦", "👅", "🍑", "😈", "💋"] as const;
 
-// ============================================================
-// INTENSITÉ
-// ============================================================
+/** Toutes les réactions */
+export const ALL_REACTIONS = [...REACTIONS_FREE, ...REACTIONS_PREMIUM] as const;
 
-export const MIN_INTENSITY = 1;
-export const MAX_INTENSITY = 4;
-export const DEFAULT_INTENSITY = 1;
-export const FREE_MAX_INTENSITY = 2;
-export const PREMIUM_MAX_INTENSITY = 4;
+/** Durée d'affichage d'une réaction (en ms) */
+export const REACTION_DISPLAY_DURATION = 5000;
 
 // ============================================================
-// PREMIUM
+// THÈMES (24 au total)
 // ============================================================
 
-export const PREMIUM_MONTHLY_PRICE = 4.99;
-export const PREMIUM_YEARLY_PRICE = 39.99;
-export const PREMIUM_MONTHLY_SKU = "intimacy_play_premium_monthly";
-export const PREMIUM_YEARLY_SKU = "intimacy_play_premium_yearly";
+/** Thèmes gratuits (2) */
+export const THEMES_FREE = [
+  { id: "romantic", name: "Romantique", emoji: "💕", description: "Doux et tendre" },
+  { id: "sensual", name: "Sensuel", emoji: "💋", description: "Séduction et caresses" },
+] as const;
+
+/** Thèmes premium (22) */
+export const THEMES_PREMIUM = [
+  { id: "torrid", name: "Torride", emoji: "🔥", description: "Passion intense" },
+  { id: "fantasies", name: "Fantasmes", emoji: "💭", description: "Réalise tes rêves" },
+  { id: "roleplay", name: "Jeux de rôle", emoji: "🎭", description: "Deviens qui tu veux" },
+  { id: "domination", name: "Domination", emoji: "👑", description: "Prends le contrôle" },
+  { id: "submission", name: "Soumission", emoji: "🔗", description: "Laisse-toi guider" },
+  { id: "bdsm_light", name: "BDSM Light", emoji: "⛓️", description: "Initiation douce" },
+  { id: "voyeurism", name: "Voyeurisme", emoji: "👀", description: "Le plaisir de regarder" },
+  { id: "exhibitionism", name: "Exhibitionnisme", emoji: "📸", description: "Ose te montrer" },
+  { id: "foreplay", name: "Préliminaires", emoji: "🌡️", description: "L'art de faire monter" },
+  { id: "fellatio", name: "Fellation", emoji: "👄", description: "Plaisir oral masculin" },
+  { id: "cunnilingus", name: "Cunnilingus", emoji: "👅", description: "Plaisir oral féminin" },
+  { id: "kamasutra", name: "Kamasutra", emoji: "🧘", description: "Positions créatives" },
+  { id: "shower", name: "Sous la douche", emoji: "🚿", description: "Plaisir aquatique" },
+  { id: "massage", name: "Massage", emoji: "💆", description: "Détente sensuelle" },
+  { id: "food", name: "Food Play", emoji: "🍓", description: "Gourmandises coquines" },
+  { id: "temperature", name: "Chaud/Froid", emoji: "🧊", description: "Jeux de température" },
+  { id: "dirty_talk", name: "Dirty Talk", emoji: "🗣️", description: "Mots qui excitent" },
+  { id: "sexting", name: "Sexting", emoji: "📱", description: "Messages torrides" },
+  { id: "surprises", name: "Surprises", emoji: "🎁", description: "L'inattendu" },
+  { id: "quickie", name: "Quickie", emoji: "⚡", description: "Vite et intense" },
+  { id: "tantrism", name: "Tantrisme", emoji: "🕉️", description: "Connexion spirituelle" },
+  { id: "random", name: "Aléatoire", emoji: "🎲", description: "Laisse le hasard décider" },
+] as const;
+
+/** Tous les thèmes */
+export const ALL_THEMES = [...THEMES_FREE, ...THEMES_PREMIUM] as const;
+
+/** IDs des thèmes gratuits */
+export const THEME_IDS_FREE = THEMES_FREE.map((t) => t.id);
+
+/** IDs des thèmes premium */
+export const THEME_IDS_PREMIUM = THEMES_PREMIUM.map((t) => t.id);
 
 // ============================================================
-// VALIDATION
+// JOUETS (10)
 // ============================================================
 
-export const MIN_PASSWORD_LENGTH = 6;
-export const MIN_DISPLAY_NAME_LENGTH = 2;
-export const MAX_DISPLAY_NAME_LENGTH = 30;
-export const MIN_AGE = 18;
+/** Liste des jouets disponibles (Premium uniquement) */
+export const TOYS = [
+  { id: "vibrator", name: "Vibromasseur", emoji: "📳", description: "Vibrations de plaisir" },
+  { id: "handcuffs", name: "Menottes", emoji: "🔐", description: "Attache-moi" },
+  { id: "blindfold", name: "Bandeau", emoji: "🙈", description: "Privé de vue" },
+  { id: "anal_plug", name: "Plug anal", emoji: "💎", description: "Plaisir interdit" },
+  { id: "dildo", name: "Gode", emoji: "🍆", description: "Substitut de plaisir" },
+  { id: "cock_ring", name: "Cockring", emoji: "💍", description: "Intensité prolongée" },
+  { id: "massage_oil", name: "Huile de massage", emoji: "🫗", description: "Glisse sensuelle" },
+  { id: "feathers", name: "Plumes", emoji: "🪶", description: "Caresses légères" },
+  { id: "nipple_clamps", name: "Pinces à tétons", emoji: "📎", description: "Douleur plaisir" },
+  { id: "collar", name: "Collier", emoji: "📿", description: "Marque de soumission" },
+] as const;
+
+/** IDs des jouets */
+export const TOY_IDS = TOYS.map((t) => t.id);
 
 // ============================================================
-// COULEURS
+// LIMITES
+// ============================================================
+
+export const LIMITS = {
+  // Session
+  SESSION_CODE_LENGTH: 6,
+  SESSION_CODE_EXPIRATION_HOURS: 24,
+  
+  // Défis
+  CHALLENGES: {
+    FREE: { min: 5, max: 10 },
+    PREMIUM: { min: 5, max: 50 },
+    DEFAULT: 10,
+  },
+  
+  // Intensité
+  INTENSITY: {
+    MIN: 1,
+    MAX: 4,
+    DEFAULT: 1,
+    FREE_MAX: 3,     // Niveaux 1-3 gratuits
+    PREMIUM_MAX: 4,  // Niveau 4 premium
+  },
+  
+  // Changements de défi
+  CHANGES: {
+    FREE: 3,         // 3 changements gratuits par partie
+    BONUS_FROM_ADS: 3, // +3 max via publicités
+  },
+  
+  // Parties gratuites
+  FREE_GAMES_PER_DAY: 3,
+  
+  // Médias
+  MEDIA_EXPIRATION_MINUTES: 10,
+  MAX_MEDIA_SIZE_MB: 10,
+  
+  // Code d'invitation couple
+  INVITE_CODE_EXPIRATION_HOURS: 24,
+  
+  // Validation
+  PASSWORD_MIN_LENGTH: 6,
+  DISPLAY_NAME_MIN_LENGTH: 2,
+  DISPLAY_NAME_MAX_LENGTH: 30,
+  MIN_AGE: 18,
+} as const;
+
+// ============================================================
+// PRICING PREMIUM
+// ============================================================
+
+export const PRICING = {
+  MONTHLY: {
+    price: 6.99,
+    priceFormatted: "6,99 €",
+    currency: "EUR",
+    period: "month",
+    periodLabel: "par mois",
+    sku: "intimacy_play_premium_monthly",
+    googlePlayId: "intimacy_play_premium_monthly",
+  },
+  YEARLY: {
+    price: 39.99,
+    priceFormatted: "39,99 €",
+    currency: "EUR",
+    period: "year",
+    periodLabel: "par an",
+    sku: "intimacy_play_premium_yearly",
+    googlePlayId: "intimacy_play_premium_yearly",
+    // Économie par rapport au mensuel
+    savingsPercent: 52, // (6.99 * 12 - 39.99) / (6.99 * 12) * 100
+    savingsFormatted: "Économise 52%",
+    monthlyEquivalent: 3.33,
+    monthlyEquivalentFormatted: "3,33 €/mois",
+  },
+} as const;
+
+/** Avantages Premium */
+export const PREMIUM_FEATURES = [
+  {
+    id: "all_levels",
+    icon: "🔥",
+    title: "Tous les niveaux",
+    description: "Accès aux défis Explicites (niveau 4)",
+  },
+  {
+    id: "all_themes",
+    icon: "🎭",
+    title: "22 thèmes exclusifs",
+    description: "Roleplay, BDSM, Fantasmes et plus",
+  },
+  {
+    id: "unlimited_challenges",
+    icon: "♾️",
+    title: "Jusqu'à 50 défis",
+    description: "Sessions plus longues et intenses",
+  },
+  {
+    id: "exclusive_reactions",
+    icon: "🥵",
+    title: "Réactions exclusives",
+    description: "6 emojis premium pour réagir",
+  },
+  {
+    id: "toys",
+    icon: "📳",
+    title: "Défis avec jouets",
+    description: "10 accessoires pour pimenter",
+  },
+  {
+    id: "no_ads",
+    icon: "🚫",
+    title: "Sans publicité",
+    description: "Expérience sans interruption",
+  },
+  {
+    id: "unlimited_games",
+    icon: "🎮",
+    title: "Parties illimitées",
+    description: "Pas de limite quotidienne",
+  },
+  {
+    id: "partner_nickname",
+    icon: "💕",
+    title: "Surnom personnalisé",
+    description: "Donne un petit nom à ton partenaire",
+  },
+] as const;
+
+// ============================================================
+// NIVEAUX D'INTENSITÉ
+// ============================================================
+
+export const INTENSITY_LEVELS = [
+  {
+    level: 1 as const,
+    name: "Romantique",
+    emoji: "😇",
+    color: "#4CAF50",
+    gradient: ["#4CAF50", "#81C784"],
+    description: "Doux et tendre, parfait pour commencer",
+    isPremium: false,
+  },
+  {
+    level: 2 as const,
+    name: "Sensuel",
+    emoji: "😊",
+    color: "#FF9800",
+    gradient: ["#FF9800", "#FFB74D"],
+    description: "Suggestif et séduisant",
+    isPremium: false,
+  },
+  {
+    level: 3 as const,
+    name: "Érotique",
+    emoji: "😏",
+    color: "#E91E63",
+    gradient: ["#E91E63", "#F48FB1"],
+    description: "Passionné et osé",
+    isPremium: false,
+  },
+  {
+    level: 4 as const,
+    name: "Explicite",
+    emoji: "🔥",
+    color: "#F44336",
+    gradient: ["#F44336", "#E57373"],
+    description: "Sans limites, pour les plus audacieux",
+    isPremium: true,
+  },
+] as const;
+
+/** Récupère les infos d'un niveau d'intensité */
+export const getIntensityInfo = (level: 1 | 2 | 3 | 4) => {
+  return INTENSITY_LEVELS.find((i) => i.level === level)!;
+};
+
+// ============================================================
+// COULEURS (raccourcis)
 // ============================================================
 
 export const COLORS = {
-  primary: "#EC4899",
-  primaryLight: "#FDF2F8",
-  primaryDark: "#DB2777",
-  secondary: "#F97316",
-  secondaryLight: "#FFF7ED",
-  background: "#FDF2F8",
-  text: "#1F2937",
-  textLight: "#6B7280",
+  // Primaires
+  primary: "#E91E63",
+  primaryLight: "#FFF5F7",
+  primaryDark: "#C2185B",
+  
+  // Secondaires
+  secondary: "#FF6B85",
+  accent: "#FF8FA3",
+  
+  // Background
+  background: "#FFF5F7",
+  surface: "#FFFFFF",
+  
+  // Texte
+  text: "#212121",
+  textSecondary: "#757575",
+  textLight: "#9E9E9E",
+  
+  // Statut
+  success: "#4CAF50",
+  error: "#F44336",
+  warning: "#FF9800",
+  info: "#2196F3",
+  
+  // Premium
+  gold: "#FFD700",
+  goldDark: "#FFA500",
+  
+  // Neutres
   white: "#FFFFFF",
   black: "#000000",
-  success: "#10B981",
-  error: "#EF4444",
-  warning: "#F59E0B",
+  border: "#E0E0E0",
+  overlay: "rgba(0, 0, 0, 0.5)",
+  
+  // Intensités
+  intensity: {
+    1: "#4CAF50",
+    2: "#FF9800",
+    3: "#E91E63",
+    4: "#F44336",
+  },
 } as const;
 
 // ============================================================
 // MESSAGES D'ERREUR
 // ============================================================
 
-export const ERROR_MESSAGES = {
+export const ERROR_MESSAGES: Record<string, string> = {
+  // Firebase Auth
   "auth/email-already-in-use": "Cet email est déjà utilisé",
   "auth/invalid-email": "Email invalide",
   "auth/weak-password": "Mot de passe trop faible (min 6 caractères)",
   "auth/user-not-found": "Email ou mot de passe incorrect",
   "auth/wrong-password": "Email ou mot de passe incorrect",
+  "auth/invalid-credential": "Email ou mot de passe incorrect",
   "auth/too-many-requests": "Trop de tentatives, réessayez plus tard",
   "auth/network-request-failed": "Erreur réseau, vérifiez votre connexion",
+  "auth/user-disabled": "Ce compte a été désactivé",
+  
+  // Session
   SESSION_NOT_FOUND: "Session introuvable",
   SESSION_FULL: "Cette session est déjà complète",
   SESSION_EXPIRED: "Cette session a expiré",
+  SESSION_ALREADY_STARTED: "Cette session a déjà commencé",
+  SESSION_COMPLETED: "Cette session est terminée",
+  
+  // Couple
+  COUPLE_NOT_FOUND: "Couple introuvable",
+  INVITE_CODE_INVALID: "Code d'invitation invalide",
+  INVITE_CODE_EXPIRED: "Code d'invitation expiré",
+  CANNOT_JOIN_OWN_COUPLE: "Vous ne pouvez pas rejoindre votre propre couple",
+  ALREADY_IN_COUPLE: "Vous êtes déjà en couple",
+  
+  // Premium
+  PREMIUM_REQUIRED: "Cette fonctionnalité nécessite un abonnement Premium",
+  PURCHASE_FAILED: "L'achat a échoué, veuillez réessayer",
+  PURCHASE_CANCELLED: "Achat annulé",
+  
+  // Général
   UNKNOWN: "Une erreur est survenue",
+  NETWORK_ERROR: "Erreur de connexion",
+  PERMISSION_DENIED: "Accès refusé",
+} as const;
+
+/** Traduit un code d'erreur en message lisible */
+export const getErrorMessage = (code: string): string => {
+  return ERROR_MESSAGES[code] || ERROR_MESSAGES.UNKNOWN;
+};
+
+// ============================================================
+// REGEX DE VALIDATION
+// ============================================================
+
+export const REGEX = {
+  EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+  SESSION_CODE: /^[A-Z0-9]{6}$/,
+  DISPLAY_NAME: /^[a-zA-ZÀ-ÿ0-9\s\-']+$/,
 } as const;
 
 // ============================================================
-// REGEX
+// CARACTÈRES POUR CODES
 // ============================================================
 
-export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-export const SESSION_CODE_REGEX = /^[A-Z0-9]{6}$/;
+/** Caractères utilisés pour générer les codes de session (sans ambiguïté) */
+export const SESSION_CODE_CHARACTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+/** Caractères utilisés pour les codes d'invitation */
+export const INVITE_CODE_CHARACTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+// ============================================================
+// STORAGE KEYS
+// ============================================================
+
+export const STORAGE_KEYS = {
+  AUTH_TOKEN: "auth_token",
+  USER_ID: "user_id",
+  FCM_TOKEN: "fcm_token",
+  ONBOARDING_COMPLETED: "onboarding_completed",
+  LAST_SESSION_CODE: "last_session_code",
+  FREE_GAMES_TODAY: "free_games_today",
+  FREE_GAMES_DATE: "free_games_date",
+  PREFERENCES: "preferences",
+} as const;
+
+// ============================================================
+// TIMEOUTS (en ms)
+// ============================================================
+
+export const TIMEOUTS = {
+  SPLASH_SCREEN: 2000,
+  SESSION_SEARCH: 30000,
+  API_REQUEST: 10000,
+  DEBOUNCE_INPUT: 300,
+  REACTION_ANIMATION: 2000,
+  TOAST_DURATION: 3000,
+} as const;
+
+// ============================================================
+// EXPORTS PAR DÉFAUT
+// ============================================================
+
+export default {
+  APP_NAME,
+  APP_VERSION,
+  REACTIONS_FREE,
+  REACTIONS_PREMIUM,
+  THEMES_FREE,
+  THEMES_PREMIUM,
+  TOYS,
+  LIMITS,
+  PRICING,
+  INTENSITY_LEVELS,
+  COLORS,
+  ERROR_MESSAGES,
+};
