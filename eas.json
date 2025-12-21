@@ -13,8 +13,7 @@
       },
       "env": {
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON"
-      },
-      "prebuildCommand": "npm run create-google-services"
+      }
     },
     "preview": {
       "distribution": "internal",
@@ -23,8 +22,7 @@
       },
       "env": {
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON"
-      },
-      "prebuildCommand": "npm run create-google-services"
+      }
     },
     "production": {
       "android": {
@@ -32,8 +30,7 @@
       },
       "env": {
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON"
-      },
-      "prebuildCommand": "npm run create-google-services"
+      }
     }
   },
   "submit": {

@@ -11,7 +11,7 @@
     "build:dev": "eas build --profile development --platform android",
     "build:preview": "eas build --profile preview --platform android",
     "build:prod": "eas build --profile production --platform android",
-    "create-google-services": "node scripts/create-google-services.js"
+    "postinstall": "node scripts/create-google-services.js || exit 0"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
