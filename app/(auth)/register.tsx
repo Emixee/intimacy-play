@@ -1,13 +1,8 @@
 /**
  * Écran d'inscription
  *
- * Fonctionnalités :
- * - Formulaire complet (email, password, genre, date de naissance)
- * - Validation des champs avec vérification 18+
- * - Sélecteur de genre personnalisé
- * - DatePicker pour la date de naissance
- * - Checkbox CGU obligatoire
- * - Gestion des erreurs et loading state
+ * Version avec TextInput pour la date de naissance
+ * Format JJ/MM/AAAA avec auto-formatage
  */
 
 import React, { useState, useCallback } from "react";
@@ -18,16 +13,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  Modal,
-  Pressable,
 } from "react-native";
 import { Link, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from "@react-native-community/datetimepicker";
 import { Button, Input } from "../../components/ui";
 import { useAuth } from "../../hooks/useAuth";
 import { Gender } from "../../types";
@@ -62,6 +52,36 @@ const GENDER_OPTIONS: { value: Gender; label: string; icon: string }[] = [
 // ============================================================
 
 /**
+ * Parse une date au format JJ/MM/AAAA
+ */
+const parseDate = (dateString: string): Date | null => {
+  const parts = dateString.split("/");
+  if (parts.length !== 3) return null;
+
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1; // Les mois commencent à 0
+  const year = parseInt(parts[2], 10);
+
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  if (day < 1 || day > 31) return null;
+  if (month < 0 || month > 11) return null;
+  if (year < 1900 || year > new Date().getFullYear()) return null;
+
+  const date = new Date(year, month, day);
+
+  // Vérifier que la date est valide
+  if (
+    date.getDate() !== day ||
+    date.getMonth() !== month ||
+    date.getFullYear() !== year
+  ) {
+    return null;
+  }
+
+  return date;
+};
+
+/**
  * Calcule l'âge à partir d'une date de naissance
  */
 const calculateAge = (birthDate: Date): number => {
@@ -80,32 +100,23 @@ const calculateAge = (birthDate: Date): number => {
 };
 
 /**
- * Formate une date en français
+ * Formate l'input de date (ajoute les / automatiquement)
  */
-const formatDate = (date: Date): string => {
-  return date.toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-};
+const formatDateInput = (text: string): string => {
+  // Supprimer tout ce qui n'est pas un chiffre
+  const numbers = text.replace(/\D/g, "");
 
-/**
- * Date maximale (18 ans minimum)
- */
-const getMaxDate = (): Date => {
-  const date = new Date();
-  date.setFullYear(date.getFullYear() - MIN_AGE);
-  return date;
-};
+  // Limiter à 8 chiffres
+  const limited = numbers.slice(0, 8);
 
-/**
- * Date minimale (100 ans)
- */
-const getMinDate = (): Date => {
-  const date = new Date();
-  date.setFullYear(date.getFullYear() - 100);
-  return date;
+  // Ajouter les /
+  if (limited.length <= 2) {
+    return limited;
+  } else if (limited.length <= 4) {
+    return `${limited.slice(0, 2)}/${limited.slice(2)}`;
+  } else {
+    return `${limited.slice(0, 2)}/${limited.slice(2, 4)}/${limited.slice(4)}`;
+  }
 };
 
 // ============================================================
@@ -153,14 +164,29 @@ const validateGender = (gender: Gender | null): string | undefined => {
   return undefined;
 };
 
-const validateDateOfBirth = (date: Date | null): string | undefined => {
-  if (!date) {
+const validateDateOfBirth = (dateString: string): string | undefined => {
+  if (!dateString.trim()) {
     return "La date de naissance est requise";
   }
+
+  if (dateString.length !== 10) {
+    return "Format attendu : JJ/MM/AAAA";
+  }
+
+  const date = parseDate(dateString);
+  if (!date) {
+    return "Date invalide";
+  }
+
   const age = calculateAge(date);
   if (age < MIN_AGE) {
     return `Vous devez avoir au moins ${MIN_AGE} ans`;
   }
+
+  if (age > 120) {
+    return "Date invalide";
+  }
+
   return undefined;
 };
 
@@ -181,13 +207,12 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [gender, setGender] = useState<Gender | null>(null);
-  const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
+  const [dateOfBirthString, setDateOfBirthString] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   // State UI
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Auth hook
   const { register, isLoading } = useAuth();
@@ -214,7 +239,7 @@ export default function RegisterScreen() {
     const genderError = validateGender(gender);
     if (genderError) newErrors.gender = genderError;
 
-    const dateError = validateDateOfBirth(dateOfBirth);
+    const dateError = validateDateOfBirth(dateOfBirthString);
     if (dateError) newErrors.dateOfBirth = dateError;
 
     const termsError = validateTerms(termsAccepted);
@@ -222,7 +247,14 @@ export default function RegisterScreen() {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [email, password, confirmPassword, gender, dateOfBirth, termsAccepted]);
+  }, [
+    email,
+    password,
+    confirmPassword,
+    gender,
+    dateOfBirthString,
+    termsAccepted,
+  ]);
 
   // ----------------------------------------------------------
   // HANDLERS
@@ -233,6 +265,7 @@ export default function RegisterScreen() {
       return;
     }
 
+    const dateOfBirth = parseDate(dateOfBirthString);
     if (!gender || !dateOfBirth) {
       return;
     }
@@ -244,14 +277,13 @@ export default function RegisterScreen() {
       const result = await register({
         email: email.trim(),
         password,
-        displayName: email.split("@")[0], // Nom temporaire basé sur l'email
+        displayName: email.split("@")[0],
         gender,
         dateOfBirth,
       });
 
       if (result.success) {
         console.log("[RegisterScreen] Registration successful");
-        // La navigation est gérée automatiquement par le layout auth
       } else {
         setErrors({ general: result.error || "Erreur d'inscription" });
       }
@@ -261,27 +293,14 @@ export default function RegisterScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [
-    email,
-    password,
-    gender,
-    dateOfBirth,
-    register,
-    validateForm,
-  ]);
+  }, [email, password, gender, dateOfBirthString, register, validateForm]);
 
   const handleDateChange = useCallback(
-    (event: DateTimePickerEvent, selectedDate?: Date) => {
-      // Sur Android, le picker se ferme automatiquement
-      if (Platform.OS === "android") {
-        setShowDatePicker(false);
-      }
-
-      if (event.type === "set" && selectedDate) {
-        setDateOfBirth(selectedDate);
-        if (errors.dateOfBirth) {
-          setErrors((prev) => ({ ...prev, dateOfBirth: undefined }));
-        }
+    (text: string) => {
+      const formatted = formatDateInput(text);
+      setDateOfBirthString(formatted);
+      if (errors.dateOfBirth) {
+        setErrors((prev) => ({ ...prev, dateOfBirth: undefined }));
       }
     },
     [errors.dateOfBirth]
@@ -466,62 +485,27 @@ export default function RegisterScreen() {
               )}
             </View>
 
-            {/* Date de naissance */}
-            <View className="mb-4">
-              <Text className="text-gray-700 font-medium mb-2 ml-1">
-                Date de naissance
-              </Text>
-              <TouchableOpacity
-                onPress={() => setShowDatePicker(true)}
-                disabled={isButtonDisabled}
-                className={`flex-row items-center bg-white rounded-xl px-4 py-3 border-2 ${
-                  errors.dateOfBirth
-                    ? "border-red-500"
-                    : dateOfBirth
-                    ? "border-pink-500"
-                    : "border-gray-300"
-                }`}
-              >
-                <Ionicons
-                  name="calendar-outline"
-                  size={20}
-                  color={
-                    errors.dateOfBirth
-                      ? "#EF4444"
-                      : dateOfBirth
-                      ? "#EC4899"
-                      : "#9CA3AF"
-                  }
-                />
-                <Text
-                  className={`flex-1 ml-3 text-base ${
-                    dateOfBirth ? "text-gray-800" : "text-gray-400"
-                  }`}
-                >
-                  {dateOfBirth
-                    ? formatDate(dateOfBirth)
-                    : "Sélectionnez votre date"}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
-              </TouchableOpacity>
-              {errors.dateOfBirth && (
-                <View className="flex-row items-center mt-1 ml-1">
-                  <Ionicons name="alert-circle" size={14} color="#EF4444" />
-                  <Text className="text-red-500 text-sm ml-1">
-                    {errors.dateOfBirth}
-                  </Text>
-                </View>
-              )}
-              <Text className="text-gray-500 text-xs mt-1 ml-1">
-                Vous devez avoir au moins {MIN_AGE} ans
-              </Text>
-            </View>
+            {/* Date de naissance (TextInput) */}
+            <Input
+              label="Date de naissance"
+              placeholder="JJ/MM/AAAA"
+              value={dateOfBirthString}
+              onChangeText={handleDateChange}
+              error={errors.dateOfBirth}
+              leftIcon="calendar-outline"
+              keyboardType="number-pad"
+              maxLength={10}
+              returnKeyType="next"
+              editable={!isButtonDisabled}
+              containerClassName="mb-2"
+              hint={`Vous devez avoir au moins ${MIN_AGE} ans`}
+            />
 
             {/* Checkbox CGU */}
             <TouchableOpacity
               onPress={handleTermsToggle}
               disabled={isButtonDisabled}
-              className="flex-row items-start mb-6"
+              className="flex-row items-start mb-6 mt-4"
             >
               <View
                 className={`w-6 h-6 rounded-md border-2 items-center justify-center mr-3 mt-0.5 ${
@@ -576,63 +560,6 @@ export default function RegisterScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* DatePicker Modal pour iOS */}
-      {Platform.OS === "ios" && showDatePicker && (
-        <Modal
-          transparent
-          animationType="slide"
-          visible={showDatePicker}
-          onRequestClose={() => setShowDatePicker(false)}
-        >
-          <Pressable
-            className="flex-1 bg-black/50 justify-end"
-            onPress={() => setShowDatePicker(false)}
-          >
-            <Pressable
-              className="bg-white rounded-t-3xl"
-              onPress={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-200">
-                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                  <Text className="text-gray-500 font-medium">Annuler</Text>
-                </TouchableOpacity>
-                <Text className="text-gray-800 font-semibold">
-                  Date de naissance
-                </Text>
-                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                  <Text className="text-pink-500 font-semibold">OK</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* DatePicker */}
-              <DateTimePicker
-                value={dateOfBirth || getMaxDate()}
-                mode="date"
-                display="spinner"
-                onChange={handleDateChange}
-                maximumDate={getMaxDate()}
-                minimumDate={getMinDate()}
-                locale="fr-FR"
-                textColor="#1F2937"
-              />
-            </Pressable>
-          </Pressable>
-        </Modal>
-      )}
-
-      {/* DatePicker pour Android (s'affiche en popup natif) */}
-      {Platform.OS === "android" && showDatePicker && (
-        <DateTimePicker
-          value={dateOfBirth || getMaxDate()}
-          mode="date"
-          display="default"
-          onChange={handleDateChange}
-          maximumDate={getMaxDate()}
-          minimumDate={getMinDate()}
-        />
-      )}
     </SafeAreaView>
   );
 }
