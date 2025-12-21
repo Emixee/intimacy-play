@@ -64,10 +64,7 @@ interface PremiumBadgeProps {
 // STYLES
 // ============================================================
 
-const variantStyles: Record
-  BadgeVariant,
-  { container: string; text: string; iconColor: string }
-> = {
+const variantStyles: Record<BadgeVariant, { container: string; text: string; iconColor: string }> = {
   default: {
     container: "bg-gray-100",
     text: "text-gray-600",
@@ -124,10 +121,7 @@ const sizeStyles: Record<BadgeSize, { container: string; text: string; icon: num
 };
 
 // Données des niveaux d'intensité
-const LEVEL_DATA: Record
-  IntensityLevel,
-  { name: string; emoji: string; color: string; bgColor: string }
-> = {
+const LEVEL_DATA: Record<IntensityLevel, { name: string; emoji: string; color: string; bgColor: string }> = {
   1: {
     name: "Romantique",
     emoji: "😇",
@@ -274,10 +268,7 @@ export function StatusBadge({
   size?: BadgeSize;
   className?: string;
 }) {
-  const statusConfig: Record
-    string,
-    { label: string; variant: BadgeVariant; icon: keyof typeof Ionicons.glyphMap }
-  > = {
+  const statusConfig: Record<string, { label: string; variant: BadgeVariant; icon: keyof typeof Ionicons.glyphMap }> = {
     waiting: { label: "En attente", variant: "warning", icon: "time-outline" },
     active: { label: "En cours", variant: "success", icon: "play-outline" },
     completed: { label: "Terminée", variant: "primary", icon: "checkmark-circle-outline" },
@@ -309,10 +300,7 @@ export function ChallengeTypeBadge({
   size?: BadgeSize;
   className?: string;
 }) {
-  const typeConfig: Record
-    string,
-    { label: string; emoji: string; bgColor: string; textColor: string }
-  > = {
+  const typeConfig: Record<string, { label: string; emoji: string; bgColor: string; textColor: string }> = {
     audio: { label: "Audio", emoji: "🎤", bgColor: "bg-blue-100", textColor: "text-blue-600" },
     video: { label: "Vidéo", emoji: "🎬", bgColor: "bg-purple-100", textColor: "text-purple-600" },
     photo: { label: "Photo", emoji: "📸", bgColor: "bg-green-100", textColor: "text-green-600" },
