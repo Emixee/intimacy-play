@@ -34,11 +34,18 @@
       ]
     },
     "plugins": [
-      "./plugins/withNotifee",
       "expo-router",
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-firebase/messaging",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#EC4899",
+          "sounds": []
+        }
+      ],
       [
         "expo-splash-screen",
         {
