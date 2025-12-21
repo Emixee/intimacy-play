@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FDF2F8"
+      "backgroundColor": "#FFF5F7"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -19,29 +19,34 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#FDF2F8"
+        "backgroundColor": "#FFF5F7"
       },
       "package": "com.intimacyplay.app",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.INTERNET",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "plugins": [
       "expo-router",
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
+      "@react-native-firebase/messaging",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FDF2F8",
+          "backgroundColor": "#FFF5F7",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200
         }
       ],
       "expo-font",
-      "@react-native-firebase/messaging"
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
