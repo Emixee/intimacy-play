@@ -1,31 +1,41 @@
 /**
- * Hook pour initialiser les notifications
- * À utiliser dans le layout principal après connexion
+ * Hook pour initialiser les notifications push
+ * 
+ * À utiliser dans le layout principal (main) après connexion
  */
 
 import { useEffect, useRef } from "react";
+import { useAuthStore } from "../store/authStore";
 import { notificationService } from "../services/notification.service";
-import { useUserStore } from "../stores/userStore";
 
-export function useNotifications() {
-  const user = useUserStore((state) => state.user);
+/**
+ * Hook qui initialise les notifications pour l'utilisateur connecté
+ * S'exécute une seule fois après la connexion
+ */
+export function useNotifications(): void {
+  const firebaseUser = useAuthStore((state) => state.firebaseUser);
   const initialized = useRef(false);
 
   useEffect(() => {
-    // Initialiser uniquement si l'utilisateur est connecté
-    if (user?.id && !initialized.current) {
-      initialized.current = true;
-
-      notificationService.initialize(user.id).then((result) => {
-        if (!result.success) {
-          console.warn("[useNotifications] Init failed:", result.error);
+    const initNotifications = async () => {
+      if (firebaseUser?.uid && !initialized.current) {
+        initialized.current = true;
+        try {
+          await notificationService.initialize(firebaseUser.uid);
+          console.log("[useNotifications] Notifications initialized");
+        } catch (error) {
+          console.error("[useNotifications] Initialization error:", error);
         }
-      });
-    }
+      }
+    };
+
+    initNotifications();
 
     // Reset si l'utilisateur se déconnecte
-    if (!user?.id) {
+    if (!firebaseUser?.uid) {
       initialized.current = false;
     }
-  }, [user?.id]);
+  }, [firebaseUser?.uid]);
 }
+
+export default useNotifications;
