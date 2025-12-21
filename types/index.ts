@@ -133,7 +133,7 @@ export const INTENSITY_LEVELS: IntensityInfo[] = [
     name: "Érotique",
     emoji: "😏",
     description: "Passionné et osé",
-    isPremium: true,
+    isPremium: false,
   },
   {
     level: 4,
