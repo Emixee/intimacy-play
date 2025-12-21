@@ -14,7 +14,7 @@
       "env": {
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON"
       },
-      "prebuildCommand": "node scripts/create-google-services.js"
+      "prebuildCommand": "npm run create-google-services"
     },
     "preview": {
       "distribution": "internal",
@@ -24,7 +24,7 @@
       "env": {
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON"
       },
-      "prebuildCommand": "node scripts/create-google-services.js"
+      "prebuildCommand": "npm run create-google-services"
     },
     "production": {
       "android": {
@@ -33,7 +33,7 @@
       "env": {
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON"
       },
-      "prebuildCommand": "node scripts/create-google-services.js"
+      "prebuildCommand": "npm run create-google-services"
     }
   },
   "submit": {
