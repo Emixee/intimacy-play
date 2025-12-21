@@ -1,13 +1,8 @@
 /**
  * Écran d'inscription
  *
- * Fonctionnalités :
- * - Formulaire complet (email, password, genre, date de naissance)
- * - Validation des champs avec vérification 18+
- * - Sélecteur de genre personnalisé
- * - DatePicker pour la date de naissance
- * - Checkbox CGU obligatoire
- * - Gestion des erreurs et loading state
+ * Version avec TextInput pour la date de naissance
+ * Format JJ/MM/AAAA avec auto-formatage
  */
 
 import React, { useState, useCallback } from "react";
@@ -18,16 +13,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  Modal,
-  Pressable,
 } from "react-native";
 import { Link, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from "@react-native-community/datetimepicker";
 import { Button, Input } from "../../components/ui";
 import { useAuth } from "../../hooks/useAuth";
 import { Gender } from "../../types";
@@ -62,6 +52,35 @@ const GENDER_OPTIONS: { value: Gender; label: string; icon: string }[] = [
 // ============================================================
 
 /**
+ * Parse une date au format JJ/MM/AAAA
+ */
+const parseDate = (dateString: string): Date | null => {
+  const parts = dateString.split("/");
+  if (parts.length !== 3) return null;
+
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const year = parseInt(parts[2], 10);
+
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  if (day < 1 || day > 31) return null;
+  if (month < 0 || month > 11) return null;
+  if (year < 1900 || year > new Date().getFullYear()) return null;
+
+  const date = new Date(year, month, day);
+
+  if (
+    date.getDate() !== day ||
+    date.getMonth() !== month ||
+    date.getFullYear() !== year
+  ) {
+    return null;
+  }
+
+  return date;
+};
+
+/**
  * Calcule l'âge à partir d'une date de naissance
  */
 const calculateAge = (birthDate: Date): number => {
@@ -80,32 +99,19 @@ const calculateAge = (birthDate: Date): number => {
 };
 
 /**
- * Formate une date en français
+ * Formate l'input de date (ajoute les / automatiquement)
  */
-const formatDate = (date: Date): string => {
-  return date.toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-};
+const formatDateInput = (text: string): string => {
+  const numbers = text.replace(/\D/g, "");
+  const limited = numbers.slice(0, 8);
 
-/**
- * Date maximale (18 ans minimum)
- */
-const getMaxDate = (): Date => {
-  const date = new Date();
-  date.setFullYear(date.getFullYear() - MIN_AGE);
-  return date;
-};
-
-/**
- * Date minimale (100 ans)
- */
-const getMinDate = (): Date => {
-  const date = new Date();
-  date.setFullYear(date.getFullYear() - 100);
-  return date;
+  if (limited.length <= 2) {
+    return limited;
+  } else if (limited.length <= 4) {
+    return `${limited.slice(0, 2)}/${limited.slice(2)}`;
+  } else {
+    return `${limited.slice(0, 2)}/${limited.slice(2, 4)}/${limited.slice(4)}`;
+  }
 };
 
 // ============================================================
@@ -153,14 +159,29 @@ const validateGender = (gender: Gender | null): string | undefined => {
   return undefined;
 };
 
-const validateDateOfBirth = (date: Date | null): string | undefined => {
-  if (!date) {
+const validateDateOfBirth = (dateString: string): string | undefined => {
+  if (!dateString.trim()) {
     return "La date de naissance est requise";
   }
+
+  if (dateString.length !== 10) {
+    return "Format attendu : JJ/MM/AAAA";
+  }
+
+  const date = parseDate(dateString);
+  if (!date) {
+    return "Date invalide";
+  }
+
   const age = calculateAge(date);
   if (age < MIN_AGE) {
     return `Vous devez avoir au moins ${MIN_AGE} ans`;
   }
+
+  if (age > 120) {
+    return "Date invalide";
+  }
+
   return undefined;
 };
 
@@ -176,25 +197,17 @@ const validateTerms = (accepted: boolean): string | undefined => {
 // ============================================================
 
 export default function RegisterScreen() {
-  // State du formulaire
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [gender, setGender] = useState<Gender | null>(null);
-  const [dateOfBirth, setDateOfBirth] = useState<Date | null>(null);
+  const [dateOfBirthString, setDateOfBirthString] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
 
-  // State UI
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Auth hook
   const { register, isLoading } = useAuth();
-
-  // ----------------------------------------------------------
-  // VALIDATION
-  // ----------------------------------------------------------
 
   const validateForm = useCallback((): boolean => {
     const newErrors: FormErrors = {};
@@ -205,16 +218,13 @@ export default function RegisterScreen() {
     const passwordError = validatePassword(password);
     if (passwordError) newErrors.password = passwordError;
 
-    const confirmPasswordError = validateConfirmPassword(
-      password,
-      confirmPassword
-    );
+    const confirmPasswordError = validateConfirmPassword(password, confirmPassword);
     if (confirmPasswordError) newErrors.confirmPassword = confirmPasswordError;
 
     const genderError = validateGender(gender);
     if (genderError) newErrors.gender = genderError;
 
-    const dateError = validateDateOfBirth(dateOfBirth);
+    const dateError = validateDateOfBirth(dateOfBirthString);
     if (dateError) newErrors.dateOfBirth = dateError;
 
     const termsError = validateTerms(termsAccepted);
@@ -222,20 +232,13 @@ export default function RegisterScreen() {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [email, password, confirmPassword, gender, dateOfBirth, termsAccepted]);
-
-  // ----------------------------------------------------------
-  // HANDLERS
-  // ----------------------------------------------------------
+  }, [email, password, confirmPassword, gender, dateOfBirthString, termsAccepted]);
 
   const handleRegister = useCallback(async () => {
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
-    if (!gender || !dateOfBirth) {
-      return;
-    }
+    const dateOfBirth = parseDate(dateOfBirthString);
+    if (!gender || !dateOfBirth) return;
 
     setIsSubmitting(true);
     setErrors({});
@@ -244,58 +247,35 @@ export default function RegisterScreen() {
       const result = await register({
         email: email.trim(),
         password,
-        displayName: email.split("@")[0], // Nom temporaire basé sur l'email
+        displayName: email.split("@")[0],
         gender,
         dateOfBirth,
       });
 
-      if (result.success) {
-        console.log("[RegisterScreen] Registration successful");
-        // La navigation est gérée automatiquement par le layout auth
-      } else {
+      if (!result.success) {
         setErrors({ general: result.error || "Erreur d'inscription" });
       }
     } catch (error: any) {
-      console.error("[RegisterScreen] Registration error:", error);
       setErrors({ general: error.message || "Une erreur est survenue" });
     } finally {
       setIsSubmitting(false);
     }
-  }, [
-    email,
-    password,
-    gender,
-    dateOfBirth,
-    register,
-    validateForm,
-  ]);
+  }, [email, password, gender, dateOfBirthString, register, validateForm]);
 
-  const handleDateChange = useCallback(
-    (event: DateTimePickerEvent, selectedDate?: Date) => {
-      // Sur Android, le picker se ferme automatiquement
-      if (Platform.OS === "android") {
-        setShowDatePicker(false);
-      }
+  const handleDateChange = useCallback((text: string) => {
+    const formatted = formatDateInput(text);
+    setDateOfBirthString(formatted);
+    if (errors.dateOfBirth) {
+      setErrors((prev) => ({ ...prev, dateOfBirth: undefined }));
+    }
+  }, [errors.dateOfBirth]);
 
-      if (event.type === "set" && selectedDate) {
-        setDateOfBirth(selectedDate);
-        if (errors.dateOfBirth) {
-          setErrors((prev) => ({ ...prev, dateOfBirth: undefined }));
-        }
-      }
-    },
-    [errors.dateOfBirth]
-  );
-
-  const handleGenderSelect = useCallback(
-    (selectedGender: Gender) => {
-      setGender(selectedGender);
-      if (errors.gender) {
-        setErrors((prev) => ({ ...prev, gender: undefined }));
-      }
-    },
-    [errors.gender]
-  );
+  const handleGenderSelect = useCallback((selectedGender: Gender) => {
+    setGender(selectedGender);
+    if (errors.gender) {
+      setErrors((prev) => ({ ...prev, gender: undefined }));
+    }
+  }, [errors.gender]);
 
   const handleTermsToggle = useCallback(() => {
     setTermsAccepted((prev) => !prev);
@@ -304,18 +284,11 @@ export default function RegisterScreen() {
     }
   }, [errors.terms]);
 
-  const clearFieldError = useCallback(
-    (field: keyof FormErrors) => {
-      if (errors[field]) {
-        setErrors((prev) => ({ ...prev, [field]: undefined }));
-      }
-    },
-    [errors]
-  );
-
-  // ----------------------------------------------------------
-  // RENDER
-  // ----------------------------------------------------------
+  const clearFieldError = useCallback((field: keyof FormErrors) => {
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+  }, [errors]);
 
   const isButtonDisabled = isSubmitting || isLoading;
 
@@ -333,7 +306,7 @@ export default function RegisterScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Header avec bouton retour */}
+          {/* Header */}
           <View className="flex-row items-center mb-6">
             <TouchableOpacity
               onPress={() => router.back()}
@@ -357,74 +330,54 @@ export default function RegisterScreen() {
 
           {/* Formulaire */}
           <View className="bg-white rounded-3xl p-6 shadow-sm">
-            {/* Erreur générale */}
             {errors.general && (
               <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-                <Text className="text-red-600 text-center">
-                  {errors.general}
-                </Text>
+                <Text className="text-red-600 text-center">{errors.general}</Text>
               </View>
             )}
 
-            {/* Email */}
             <Input
               label="Email"
               placeholder="votre@email.com"
               value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                clearFieldError("email");
-              }}
+              onChangeText={(text) => { setEmail(text); clearFieldError("email"); }}
               error={errors.email}
               leftIcon="mail-outline"
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="email"
-              returnKeyType="next"
               editable={!isButtonDisabled}
               containerClassName="mb-4"
             />
 
-            {/* Mot de passe */}
             <Input
               label="Mot de passe"
               placeholder="Minimum 6 caractères"
               value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                clearFieldError("password");
-              }}
+              onChangeText={(text) => { setPassword(text); clearFieldError("password"); }}
               error={errors.password}
               leftIcon="lock-closed-outline"
               secureTextEntry
               autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="next"
               editable={!isButtonDisabled}
               containerClassName="mb-4"
             />
 
-            {/* Confirmation mot de passe */}
             <Input
               label="Confirmer le mot de passe"
               placeholder="Retapez votre mot de passe"
               value={confirmPassword}
-              onChangeText={(text) => {
-                setConfirmPassword(text);
-                clearFieldError("confirmPassword");
-              }}
+              onChangeText={(text) => { setConfirmPassword(text); clearFieldError("confirmPassword"); }}
               error={errors.confirmPassword}
               leftIcon="lock-closed-outline"
               secureTextEntry
               autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="next"
               editable={!isButtonDisabled}
               containerClassName="mb-4"
             />
 
-            {/* Sélecteur de genre */}
+            {/* Genre */}
             <View className="mb-4">
               <Text className="text-gray-700 font-medium mb-2 ml-1">Genre</Text>
               <View className="flex-row gap-3">
@@ -444,13 +397,9 @@ export default function RegisterScreen() {
                       size={20}
                       color={gender === option.value ? "#EC4899" : "#9CA3AF"}
                     />
-                    <Text
-                      className={`ml-2 font-medium ${
-                        gender === option.value
-                          ? "text-pink-500"
-                          : "text-gray-600"
-                      }`}
-                    >
+                    <Text className={`ml-2 font-medium ${
+                      gender === option.value ? "text-pink-500" : "text-gray-600"
+                    }`}>
                       {option.label}
                     </Text>
                   </TouchableOpacity>
@@ -459,92 +408,45 @@ export default function RegisterScreen() {
               {errors.gender && (
                 <View className="flex-row items-center mt-1 ml-1">
                   <Ionicons name="alert-circle" size={14} color="#EF4444" />
-                  <Text className="text-red-500 text-sm ml-1">
-                    {errors.gender}
-                  </Text>
+                  <Text className="text-red-500 text-sm ml-1">{errors.gender}</Text>
                 </View>
               )}
             </View>
 
             {/* Date de naissance */}
-            <View className="mb-4">
-              <Text className="text-gray-700 font-medium mb-2 ml-1">
-                Date de naissance
-              </Text>
-              <TouchableOpacity
-                onPress={() => setShowDatePicker(true)}
-                disabled={isButtonDisabled}
-                className={`flex-row items-center bg-white rounded-xl px-4 py-3 border-2 ${
-                  errors.dateOfBirth
-                    ? "border-red-500"
-                    : dateOfBirth
-                    ? "border-pink-500"
-                    : "border-gray-300"
-                }`}
-              >
-                <Ionicons
-                  name="calendar-outline"
-                  size={20}
-                  color={
-                    errors.dateOfBirth
-                      ? "#EF4444"
-                      : dateOfBirth
-                      ? "#EC4899"
-                      : "#9CA3AF"
-                  }
-                />
-                <Text
-                  className={`flex-1 ml-3 text-base ${
-                    dateOfBirth ? "text-gray-800" : "text-gray-400"
-                  }`}
-                >
-                  {dateOfBirth
-                    ? formatDate(dateOfBirth)
-                    : "Sélectionnez votre date"}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
-              </TouchableOpacity>
-              {errors.dateOfBirth && (
-                <View className="flex-row items-center mt-1 ml-1">
-                  <Ionicons name="alert-circle" size={14} color="#EF4444" />
-                  <Text className="text-red-500 text-sm ml-1">
-                    {errors.dateOfBirth}
-                  </Text>
-                </View>
-              )}
-              <Text className="text-gray-500 text-xs mt-1 ml-1">
-                Vous devez avoir au moins {MIN_AGE} ans
-              </Text>
-            </View>
+            <Input
+              label="Date de naissance"
+              placeholder="JJ/MM/AAAA"
+              value={dateOfBirthString}
+              onChangeText={handleDateChange}
+              error={errors.dateOfBirth}
+              leftIcon="calendar-outline"
+              keyboardType="number-pad"
+              maxLength={10}
+              editable={!isButtonDisabled}
+              containerClassName="mb-2"
+              hint={`Vous devez avoir au moins ${MIN_AGE} ans`}
+            />
 
-            {/* Checkbox CGU */}
+            {/* CGU */}
             <TouchableOpacity
               onPress={handleTermsToggle}
               disabled={isButtonDisabled}
-              className="flex-row items-start mb-6"
+              className="flex-row items-start mb-6 mt-4"
             >
-              <View
-                className={`w-6 h-6 rounded-md border-2 items-center justify-center mr-3 mt-0.5 ${
-                  termsAccepted
-                    ? "bg-pink-500 border-pink-500"
-                    : errors.terms
-                    ? "border-red-500"
-                    : "border-gray-300"
-                }`}
-              >
-                {termsAccepted && (
-                  <Ionicons name="checkmark" size={16} color="white" />
-                )}
+              <View className={`w-6 h-6 rounded-md border-2 items-center justify-center mr-3 mt-0.5 ${
+                termsAccepted
+                  ? "bg-pink-500 border-pink-500"
+                  : errors.terms
+                  ? "border-red-500"
+                  : "border-gray-300"
+              }`}>
+                {termsAccepted && <Ionicons name="checkmark" size={16} color="white" />}
               </View>
               <Text className="flex-1 text-gray-600 text-sm">
                 J'accepte les{" "}
-                <Text className="text-pink-500 font-medium">
-                  Conditions Générales d'Utilisation
-                </Text>{" "}
-                et la{" "}
-                <Text className="text-pink-500 font-medium">
-                  Politique de Confidentialité
-                </Text>
+                <Text className="text-pink-500 font-medium">CGU</Text> et la{" "}
+                <Text className="text-pink-500 font-medium">Politique de Confidentialité</Text>
               </Text>
             </TouchableOpacity>
             {errors.terms && (
@@ -554,7 +456,6 @@ export default function RegisterScreen() {
               </View>
             )}
 
-            {/* Bouton S'inscrire */}
             <Button
               title="S'inscrire"
               variant="primary"
@@ -565,7 +466,7 @@ export default function RegisterScreen() {
             />
           </View>
 
-          {/* Lien vers connexion */}
+          {/* Lien connexion */}
           <View className="flex-row justify-center items-center mt-6 mb-4">
             <Text className="text-gray-600">Déjà un compte ? </Text>
             <Link href="/(auth)/login" asChild>
@@ -576,63 +477,6 @@ export default function RegisterScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* DatePicker Modal pour iOS */}
-      {Platform.OS === "ios" && showDatePicker && (
-        <Modal
-          transparent
-          animationType="slide"
-          visible={showDatePicker}
-          onRequestClose={() => setShowDatePicker(false)}
-        >
-          <Pressable
-            className="flex-1 bg-black/50 justify-end"
-            onPress={() => setShowDatePicker(false)}
-          >
-            <Pressable
-              className="bg-white rounded-t-3xl"
-              onPress={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-200">
-                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                  <Text className="text-gray-500 font-medium">Annuler</Text>
-                </TouchableOpacity>
-                <Text className="text-gray-800 font-semibold">
-                  Date de naissance
-                </Text>
-                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                  <Text className="text-pink-500 font-semibold">OK</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* DatePicker */}
-              <DateTimePicker
-                value={dateOfBirth || getMaxDate()}
-                mode="date"
-                display="spinner"
-                onChange={handleDateChange}
-                maximumDate={getMaxDate()}
-                minimumDate={getMinDate()}
-                locale="fr-FR"
-                textColor="#1F2937"
-              />
-            </Pressable>
-          </Pressable>
-        </Modal>
-      )}
-
-      {/* DatePicker pour Android (s'affiche en popup natif) */}
-      {Platform.OS === "android" && showDatePicker && (
-        <DateTimePicker
-          value={dateOfBirth || getMaxDate()}
-          mode="date"
-          display="default"
-          onChange={handleDateChange}
-          maximumDate={getMaxDate()}
-          minimumDate={getMinDate()}
-        />
-      )}
     </SafeAreaView>
   );
 }
