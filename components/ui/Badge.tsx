@@ -1,12 +1,13 @@
 /**
  * Composant Badge réutilisable
  *
- * Affiche des badges/étiquettes avec différentes variantes de couleur.
- * Utilisé pour les statuts, niveaux d'intensité, types de défis, etc.
+ * Affiche des labels, statuts, niveaux, etc.
+ * Plusieurs variantes : default, success, warning, danger, premium, level.
  */
 
-import React, { ReactNode } from "react";
-import { View, Text, StyleProp, ViewStyle } from "react-native";
+import React from "react";
+import { View, Text, ViewProps } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { IntensityLevel } from "../../types";
 
 // ============================================================
@@ -16,38 +17,46 @@ import { IntensityLevel } from "../../types";
 type BadgeVariant =
   | "default"
   | "primary"
-  | "secondary"
   | "success"
   | "warning"
-  | "error"
-  | "info";
+  | "danger"
+  | "premium"
+  | "outline";
 
 type BadgeSize = "sm" | "md" | "lg";
 
-interface BadgeProps {
-  children: ReactNode;
+interface BadgeProps extends ViewProps {
+  /** Texte du badge */
+  label: string;
+  /** Variante visuelle */
   variant?: BadgeVariant;
+  /** Taille du badge */
   size?: BadgeSize;
+  /** Icône à gauche */
+  icon?: keyof typeof Ionicons.glyphMap;
+  /** Emoji à gauche (priorité sur icon) */
+  emoji?: string;
+  /** Classes supplémentaires */
   className?: string;
-  style?: StyleProp<ViewStyle>;
 }
 
-interface IntensityBadgeProps {
+interface LevelBadgeProps {
+  /** Niveau d'intensité (1-4) */
   level: IntensityLevel;
+  /** Afficher le nom complet du niveau */
   showLabel?: boolean;
+  /** Taille */
   size?: BadgeSize;
+  /** Classes supplémentaires */
   className?: string;
 }
 
-interface StatusBadgeProps {
-  status: "waiting" | "active" | "completed" | "abandoned";
+interface PremiumBadgeProps {
+  /** Texte personnalisé */
+  label?: string;
+  /** Taille */
   size?: BadgeSize;
-  className?: string;
-}
-
-interface ChallengeTypeBadgeProps {
-  type: "audio" | "video" | "photo" | "texte";
-  size?: BadgeSize;
+  /** Classes supplémentaires */
   className?: string;
 }
 
@@ -55,70 +64,94 @@ interface ChallengeTypeBadgeProps {
 // STYLES
 // ============================================================
 
-const variantStyles: Record<BadgeVariant, { bg: string; text: string }> = {
-  default: { bg: "bg-gray-100", text: "text-gray-800" },
-  primary: { bg: "bg-pink-100", text: "text-pink-800" },
-  secondary: { bg: "bg-gray-200", text: "text-gray-700" },
-  success: { bg: "bg-green-100", text: "text-green-800" },
-  warning: { bg: "bg-yellow-100", text: "text-yellow-800" },
-  error: { bg: "bg-red-100", text: "text-red-800" },
-  info: { bg: "bg-blue-100", text: "text-blue-800" },
+const variantStyles: Record
+  BadgeVariant,
+  { container: string; text: string; iconColor: string }
+> = {
+  default: {
+    container: "bg-gray-100",
+    text: "text-gray-600",
+    iconColor: "#6B7280",
+  },
+  primary: {
+    container: "bg-pink-100",
+    text: "text-pink-600",
+    iconColor: "#EC4899",
+  },
+  success: {
+    container: "bg-green-100",
+    text: "text-green-600",
+    iconColor: "#10B981",
+  },
+  warning: {
+    container: "bg-amber-100",
+    text: "text-amber-600",
+    iconColor: "#F59E0B",
+  },
+  danger: {
+    container: "bg-red-100",
+    text: "text-red-600",
+    iconColor: "#EF4444",
+  },
+  premium: {
+    container: "bg-amber-100",
+    text: "text-amber-600",
+    iconColor: "#F59E0B",
+  },
+  outline: {
+    container: "bg-transparent border border-gray-300",
+    text: "text-gray-600",
+    iconColor: "#6B7280",
+  },
 };
 
-const sizeStyles: Record<BadgeSize, { container: string; text: string }> = {
-  sm: { container: "px-2 py-0.5 rounded", text: "text-xs" },
-  md: { container: "px-2.5 py-1 rounded-md", text: "text-sm" },
-  lg: { container: "px-3 py-1.5 rounded-lg", text: "text-base" },
+const sizeStyles: Record<BadgeSize, { container: string; text: string; icon: number }> = {
+  sm: {
+    container: "px-2 py-0.5 rounded-md",
+    text: "text-xs",
+    icon: 12,
+  },
+  md: {
+    container: "px-3 py-1 rounded-lg",
+    text: "text-sm",
+    icon: 14,
+  },
+  lg: {
+    container: "px-4 py-1.5 rounded-xl",
+    text: "text-base",
+    icon: 16,
+  },
 };
 
-const intensityConfig: Record<
+// Données des niveaux d'intensité
+const LEVEL_DATA: Record
   IntensityLevel,
-  { emoji: string; label: string; bg: string; text: string }
+  { name: string; emoji: string; color: string; bgColor: string }
 > = {
   1: {
+    name: "Romantique",
     emoji: "😇",
-    label: "Romantique",
-    bg: "bg-pink-100",
-    text: "text-pink-800",
+    color: "text-blue-600",
+    bgColor: "bg-blue-100",
   },
   2: {
+    name: "Sensuel",
     emoji: "😊",
-    label: "Sensuel",
-    bg: "bg-orange-100",
-    text: "text-orange-800",
+    color: "text-purple-600",
+    bgColor: "bg-purple-100",
   },
   3: {
+    name: "Érotique",
     emoji: "😏",
-    label: "Érotique",
-    bg: "bg-purple-100",
-    text: "text-purple-800",
+    color: "text-orange-600",
+    bgColor: "bg-orange-100",
   },
   4: {
+    name: "Explicite",
     emoji: "🔥",
-    label: "Explicite",
-    bg: "bg-red-100",
-    text: "text-red-800",
+    color: "text-red-600",
+    bgColor: "bg-red-100",
   },
-};
-
-const statusConfig: Record<
-  string,
-  { label: string; bg: string; text: string }
-> = {
-  waiting: { label: "En attente", bg: "bg-yellow-100", text: "text-yellow-800" },
-  active: { label: "En cours", bg: "bg-green-100", text: "text-green-800" },
-  completed: { label: "Terminée", bg: "bg-blue-100", text: "text-blue-800" },
-  abandoned: { label: "Abandonnée", bg: "bg-gray-100", text: "text-gray-800" },
-};
-
-const challengeTypeConfig: Record<
-  string,
-  { emoji: string; label: string; bg: string; text: string }
-> = {
-  audio: { emoji: "🎤", label: "Audio", bg: "bg-purple-100", text: "text-purple-800" },
-  video: { emoji: "🎬", label: "Vidéo", bg: "bg-red-100", text: "text-red-800" },
-  photo: { emoji: "📸", label: "Photo", bg: "bg-blue-100", text: "text-blue-800" },
-  texte: { emoji: "✍️", label: "Texte", bg: "bg-green-100", text: "text-green-800" },
 };
 
 // ============================================================
@@ -128,121 +161,186 @@ const challengeTypeConfig: Record<
 /**
  * Badge générique
  */
-export const Badge = ({
-  children,
+export function Badge({
+  label,
   variant = "default",
   size = "md",
+  icon,
+  emoji,
   className = "",
-  style,
-}: BadgeProps) => {
-  const variantStyle = variantStyles[variant];
-  const sizeStyle = sizeStyles[size];
+  ...props
+}: BadgeProps) {
+  const styles = variantStyles[variant];
+  const sizes = sizeStyles[size];
 
   return (
     <View
-      className={`${variantStyle.bg} ${sizeStyle.container} self-start ${className}`.trim()}
-      style={style}
+      className={`
+        flex-row items-center self-start
+        ${styles.container}
+        ${sizes.container}
+        ${className}
+      `}
+      {...props}
     >
-      <Text className={`${variantStyle.text} ${sizeStyle.text} font-medium`}>
-        {children}
+      {/* Emoji ou Icône */}
+      {emoji ? (
+        <Text className={`mr-1 ${sizes.text}`}>{emoji}</Text>
+      ) : icon ? (
+        <Ionicons
+          name={icon}
+          size={sizes.icon}
+          color={styles.iconColor}
+          style={{ marginRight: 4 }}
+        />
+      ) : null}
+
+      {/* Label */}
+      <Text className={`font-medium ${styles.text} ${sizes.text}`}>
+        {label}
       </Text>
     </View>
   );
-};
+}
 
 /**
- * Badge pour les niveaux d'intensité
+ * Badge de niveau d'intensité
  */
-export const IntensityBadge = ({
+export function LevelBadge({
   level,
   showLabel = true,
   size = "md",
   className = "",
-}: IntensityBadgeProps) => {
-  const config = intensityConfig[level];
-  const sizeStyle = sizeStyles[size];
+}: LevelBadgeProps) {
+  const data = LEVEL_DATA[level];
+  const sizes = sizeStyles[size];
 
   return (
     <View
-      className={`${config.bg} ${sizeStyle.container} flex-row items-center self-start ${className}`.trim()}
+      className={`
+        flex-row items-center self-start
+        ${data.bgColor}
+        ${sizes.container}
+        ${className}
+      `}
     >
-      <Text className={sizeStyle.text}>{config.emoji}</Text>
+      <Text className={sizes.text}>{data.emoji}</Text>
       {showLabel && (
-        <Text className={`${config.text} ${sizeStyle.text} font-medium ml-1`}>
-          {config.label}
+        <Text className={`font-medium ${data.color} ${sizes.text} ml-1`}>
+          {data.name}
         </Text>
       )}
     </View>
   );
-};
-
-/**
- * Badge pour les statuts de session
- */
-export const StatusBadge = ({
-  status,
-  size = "md",
-  className = "",
-}: StatusBadgeProps) => {
-  const config = statusConfig[status];
-  const sizeStyle = sizeStyles[size];
-
-  return (
-    <View
-      className={`${config.bg} ${sizeStyle.container} self-start ${className}`.trim()}
-    >
-      <Text className={`${config.text} ${sizeStyle.text} font-medium`}>
-        {config.label}
-      </Text>
-    </View>
-  );
-};
-
-/**
- * Badge pour les types de défis
- */
-export const ChallengeTypeBadge = ({
-  type,
-  size = "md",
-  className = "",
-}: ChallengeTypeBadgeProps) => {
-  const config = challengeTypeConfig[type];
-  const sizeStyle = sizeStyles[size];
-
-  return (
-    <View
-      className={`${config.bg} ${sizeStyle.container} flex-row items-center self-start ${className}`.trim()}
-    >
-      <Text className={sizeStyle.text}>{config.emoji}</Text>
-      <Text className={`${config.text} ${sizeStyle.text} font-medium ml-1`}>
-        {config.label}
-      </Text>
-    </View>
-  );
-};
+}
 
 /**
  * Badge Premium
  */
-export const PremiumBadge = ({
+export function PremiumBadge({
+  label = "Premium",
   size = "md",
   className = "",
-}: {
-  size?: BadgeSize;
-  className?: string;
-}) => {
-  const sizeStyle = sizeStyles[size];
+}: PremiumBadgeProps) {
+  const sizes = sizeStyles[size];
 
   return (
     <View
-      className={`bg-gradient-to-r from-yellow-400 to-yellow-500 ${sizeStyle.container} flex-row items-center self-start ${className}`.trim()}
+      className={`
+        flex-row items-center self-start
+        bg-gradient-to-r from-amber-100 to-yellow-100
+        bg-amber-100
+        ${sizes.container}
+        ${className}
+      `}
     >
-      <Text className={sizeStyle.text}>👑</Text>
-      <Text className={`text-white ${sizeStyle.text} font-bold ml-1`}>
-        Premium
+      <Text className={sizes.text}>👑</Text>
+      <Text className={`font-semibold text-amber-600 ${sizes.text} ml-1`}>
+        {label}
       </Text>
     </View>
   );
-};
+}
+
+/**
+ * Badge de statut de session
+ */
+export function StatusBadge({
+  status,
+  size = "md",
+  className = "",
+}: {
+  status: "waiting" | "active" | "completed" | "abandoned";
+  size?: BadgeSize;
+  className?: string;
+}) {
+  const statusConfig: Record
+    string,
+    { label: string; variant: BadgeVariant; icon: keyof typeof Ionicons.glyphMap }
+  > = {
+    waiting: { label: "En attente", variant: "warning", icon: "time-outline" },
+    active: { label: "En cours", variant: "success", icon: "play-outline" },
+    completed: { label: "Terminée", variant: "primary", icon: "checkmark-circle-outline" },
+    abandoned: { label: "Abandonnée", variant: "danger", icon: "close-circle-outline" },
+  };
+
+  const config = statusConfig[status];
+
+  return (
+    <Badge
+      label={config.label}
+      variant={config.variant}
+      icon={config.icon}
+      size={size}
+      className={className}
+    />
+  );
+}
+
+/**
+ * Badge de type de défi
+ */
+export function ChallengeTypeBadge({
+  type,
+  size = "sm",
+  className = "",
+}: {
+  type: "audio" | "video" | "photo" | "texte";
+  size?: BadgeSize;
+  className?: string;
+}) {
+  const typeConfig: Record
+    string,
+    { label: string; emoji: string; bgColor: string; textColor: string }
+  > = {
+    audio: { label: "Audio", emoji: "🎤", bgColor: "bg-blue-100", textColor: "text-blue-600" },
+    video: { label: "Vidéo", emoji: "🎬", bgColor: "bg-purple-100", textColor: "text-purple-600" },
+    photo: { label: "Photo", emoji: "📸", bgColor: "bg-green-100", textColor: "text-green-600" },
+    texte: { label: "Texte", emoji: "✍️", bgColor: "bg-orange-100", textColor: "text-orange-600" },
+  };
+
+  const config = typeConfig[type];
+  const sizes = sizeStyles[size];
+
+  return (
+    <View
+      className={`
+        flex-row items-center self-start
+        ${config.bgColor}
+        ${sizes.container}
+        ${className}
+      `}
+    >
+      <Text className={sizes.text}>{config.emoji}</Text>
+      <Text className={`font-medium ${config.textColor} ${sizes.text} ml-1`}>
+        {config.label}
+      </Text>
+    </View>
+  );
+}
+
+// ============================================================
+// EXPORTS
+// ============================================================
 
 export default Badge;
