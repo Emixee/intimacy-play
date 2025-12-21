@@ -11,7 +11,11 @@
     "build:dev": "eas build --profile development --platform android",
     "build:preview": "eas build --profile preview --platform android",
     "build:prod": "eas build --profile production --platform android",
-    "postinstall": "node scripts/create-google-services.js || exit 0"
+    "postinstall": "node scripts/create-google-services.js || exit 0",
+    "firebase:login": "firebase login",
+    "firebase:deploy:rules": "firebase deploy --only firestore:rules",
+    "firebase:deploy:all": "firebase deploy --only firestore",
+    "firebase:emulator": "firebase emulators:start --only firestore"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
