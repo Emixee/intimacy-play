@@ -6,3 +6,10 @@ export { Button } from "./Button";
 export { Input } from "./Input";
 export { LoadingSpinner, LoadingScreen } from "./LoadingSpinner";
 export { Card } from "./Card";
+export {
+  Badge,
+  IntensityBadge,
+  StatusBadge,
+  ChallengeTypeBadge,
+  PremiumBadge,
+} from "./Badge";
