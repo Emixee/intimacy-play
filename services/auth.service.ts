@@ -2,10 +2,11 @@
  * Service d'authentification Firebase
  *
  * Gère toutes les opérations d'authentification :
- * - Inscription avec création de document Firestore
+ * - Inscription avec vérification 18+ et création de document Firestore
  * - Connexion avec mise à jour lastLogin
  * - Déconnexion
  * - Réinitialisation de mot de passe
+ * - Suppression de compte RGPD complète (user, couple, sessions)
  * - Listener d'état d'authentification
  *
  * ⚠️ IMPORTANT: Le document utilisateur doit inclure le champ 'preferences'
@@ -19,6 +20,8 @@ import {
   serverTimestamp,
   toTimestamp,
   usersCollection,
+  couplesCollection,
+  sessionsCollection,
 } from "../config/firebase";
 import {
   User,
@@ -54,6 +57,9 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   // Erreurs générales
   "auth/operation-not-allowed": "Opération non autorisée",
   "auth/requires-recent-login": "Veuillez vous reconnecter pour continuer",
+
+  // Erreur personnalisée
+  "auth/underage": "Vous devez avoir au moins 18 ans pour utiliser cette application",
 };
 
 /**
@@ -75,14 +81,46 @@ const getAuthErrorMessage = (errorCode: string): string => {
  * - Langue française
  */
 const DEFAULT_USER_PREFERENCES: UserPreferences = {
-  themes: ["romantic", "sensual"], // Thèmes gratuits par défaut
-  toys: [], // Pas de jouets par défaut
+  themes: ["romantic", "sensual"],
+  toys: [],
   mediaPreferences: {
     photo: true,
     audio: true,
     video: true,
   },
   language: "fr",
+};
+
+// ============================================================
+// FONCTIONS UTILITAIRES
+// ============================================================
+
+/**
+ * Calcule l'âge à partir d'une date de naissance
+ * @param dateOfBirth - Date de naissance
+ * @returns Âge en années
+ */
+const calculateAge = (dateOfBirth: Date): number => {
+  const today = new Date();
+  const birthDate = new Date(dateOfBirth);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  
+  // Ajuster si l'anniversaire n'est pas encore passé cette année
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  
+  return age;
+};
+
+/**
+ * Vérifie si l'utilisateur a au moins 18 ans
+ * @param dateOfBirth - Date de naissance
+ * @returns true si 18+, false sinon
+ */
+const isAdult = (dateOfBirth: Date): boolean => {
+  return calculateAge(dateOfBirth) >= 18;
 };
 
 // ============================================================
@@ -96,9 +134,10 @@ export const authService = {
 
   /**
    * Inscrit un nouvel utilisateur
-   * 1. Crée le compte Firebase Auth
-   * 2. Envoie l'email de vérification
-   * 3. Crée le document utilisateur dans Firestore (avec preferences)
+   * 1. Vérifie que l'utilisateur a au moins 18 ans
+   * 2. Crée le compte Firebase Auth
+   * 3. Envoie l'email de vérification
+   * 4. Crée le document utilisateur dans Firestore (avec preferences)
    *
    * @param credentials - Email, password, displayName, gender, dateOfBirth
    * @returns ApiResponse avec l'utilisateur Firebase
@@ -109,20 +148,30 @@ export const authService = {
     const { email, password, displayName, gender, dateOfBirth } = credentials;
 
     try {
-      // 1. Créer le compte Firebase Auth
+      // 1. Vérification de l'âge (18+)
+      if (!isAdult(dateOfBirth)) {
+        console.log("[AuthService] Registration rejected: user is under 18");
+        return {
+          success: false,
+          error: getAuthErrorMessage("auth/underage"),
+          code: "auth/underage",
+        };
+      }
+
+      // 2. Créer le compte Firebase Auth
       const userCredential = await auth().createUserWithEmailAndPassword(
         email,
         password
       );
       const firebaseUser = userCredential.user;
 
-      // 2. Envoyer l'email de vérification
+      // 3. Envoyer l'email de vérification
       await firebaseUser.sendEmailVerification();
 
-      // 3. Mettre à jour le displayName dans Firebase Auth
+      // 4. Mettre à jour le displayName dans Firebase Auth
       await firebaseUser.updateProfile({ displayName });
 
-      // 4. Créer le document utilisateur dans Firestore
+      // 5. Créer le document utilisateur dans Firestore
       // ⚠️ IMPORTANT: Le champ 'preferences' est REQUIS par les règles Firestore
       const userData: Omit<User, "id"> = {
         email,
@@ -159,6 +208,7 @@ export const authService = {
       return {
         success: false,
         error: getAuthErrorMessage(error.code),
+        code: error.code,
       };
     }
   },
@@ -203,6 +253,7 @@ export const authService = {
       return {
         success: false,
         error: getAuthErrorMessage(error.code),
+        code: error.code,
       };
     }
   },
@@ -250,6 +301,7 @@ export const authService = {
       return {
         success: false,
         error: getAuthErrorMessage(error.code),
+        code: error.code,
       };
     }
   },
@@ -281,6 +333,7 @@ export const authService = {
       return {
         success: false,
         error: getAuthErrorMessage(error.code),
+        code: error.code,
       };
     }
   },
@@ -395,12 +448,17 @@ export const authService = {
   },
 
   // ----------------------------------------------------------
-  // SUPPRESSION DE COMPTE (RGPD)
+  // SUPPRESSION DE COMPTE (RGPD COMPLÈTE)
   // ----------------------------------------------------------
 
   /**
-   * Supprime le compte utilisateur (Firebase Auth + Firestore)
-   * Conformité RGPD
+   * Supprime TOUTES les données de l'utilisateur (conformité RGPD)
+   * 
+   * Ordre de suppression :
+   * 1. Sessions où l'utilisateur est créateur ou partenaire
+   * 2. Couple lié à l'utilisateur
+   * 3. Document utilisateur Firestore
+   * 4. Compte Firebase Auth
    *
    * @returns ApiResponse void
    */
@@ -415,14 +473,113 @@ export const authService = {
       }
 
       const uid = currentUser.uid;
+      console.log("[AuthService] Starting RGPD account deletion for:", uid);
 
-      // 1. Supprimer le document Firestore
+      // 1. Récupérer les données utilisateur pour connaître le coupleId
+      const userDoc = await usersCollection().doc(uid).get();
+      const userData = userDoc.data() as Omit<User, "id"> | undefined;
+
+      // 2. Supprimer les sessions où l'utilisateur est créateur
+      const creatorSessionsSnapshot = await sessionsCollection()
+        .where("creatorId", "==", uid)
+        .get();
+
+      for (const sessionDoc of creatorSessionsSnapshot.docs) {
+        // Supprimer les sous-collections (messages) si elles existent
+        const messagesSnapshot = await sessionDoc.ref.collection("messages").get();
+        for (const messageDoc of messagesSnapshot.docs) {
+          await messageDoc.ref.delete();
+        }
+        await sessionDoc.ref.delete();
+        console.log("[AuthService] Deleted session (creator):", sessionDoc.id);
+      }
+
+      // 3. Supprimer les sessions où l'utilisateur est partenaire
+      const partnerSessionsSnapshot = await sessionsCollection()
+        .where("partnerId", "==", uid)
+        .get();
+
+      for (const sessionDoc of partnerSessionsSnapshot.docs) {
+        // Supprimer les sous-collections (messages) si elles existent
+        const messagesSnapshot = await sessionDoc.ref.collection("messages").get();
+        for (const messageDoc of messagesSnapshot.docs) {
+          await messageDoc.ref.delete();
+        }
+        await sessionDoc.ref.delete();
+        console.log("[AuthService] Deleted session (partner):", sessionDoc.id);
+      }
+
+      // 4. Supprimer le couple si l'utilisateur en a un
+      if (userData?.coupleId) {
+        const coupleDoc = await couplesCollection().doc(userData.coupleId).get();
+        
+        if (coupleDoc.exists) {
+          const coupleData = coupleDoc.data();
+          
+          // Mettre à jour le partenaire (retirer le coupleId)
+          const partnerId = coupleData?.user1Id === uid 
+            ? coupleData?.user2Id 
+            : coupleData?.user1Id;
+
+          if (partnerId) {
+            await usersCollection().doc(partnerId).update({
+              coupleId: null,
+              partnerNickname: null,
+            });
+            console.log("[AuthService] Updated partner:", partnerId);
+          }
+
+          // Supprimer le document couple
+          await couplesCollection().doc(userData.coupleId).delete();
+          console.log("[AuthService] Deleted couple:", userData.coupleId);
+        }
+      }
+
+      // 5. Supprimer les couples où l'utilisateur est user1Id ou user2Id
+      // (au cas où le coupleId n'est pas synchronisé)
+      const couplesAsUser1 = await couplesCollection()
+        .where("user1Id", "==", uid)
+        .get();
+      
+      for (const coupleDoc of couplesAsUser1.docs) {
+        // Nettoyer le partenaire
+        const coupleData = coupleDoc.data();
+        if (coupleData?.user2Id) {
+          await usersCollection().doc(coupleData.user2Id).update({
+            coupleId: null,
+            partnerNickname: null,
+          });
+        }
+        await coupleDoc.ref.delete();
+        console.log("[AuthService] Deleted couple (as user1):", coupleDoc.id);
+      }
+
+      const couplesAsUser2 = await couplesCollection()
+        .where("user2Id", "==", uid)
+        .get();
+      
+      for (const coupleDoc of couplesAsUser2.docs) {
+        // Nettoyer le partenaire
+        const coupleData = coupleDoc.data();
+        if (coupleData?.user1Id) {
+          await usersCollection().doc(coupleData.user1Id).update({
+            coupleId: null,
+            partnerNickname: null,
+          });
+        }
+        await coupleDoc.ref.delete();
+        console.log("[AuthService] Deleted couple (as user2):", coupleDoc.id);
+      }
+
+      // 6. Supprimer le document utilisateur Firestore
       await usersCollection().doc(uid).delete();
+      console.log("[AuthService] Deleted user document:", uid);
 
-      // 2. Supprimer le compte Firebase Auth
+      // 7. Supprimer le compte Firebase Auth (en dernier)
       await currentUser.delete();
+      console.log("[AuthService] Deleted Firebase Auth account:", uid);
 
-      console.log("[AuthService] Account deleted:", uid);
+      console.log("[AuthService] RGPD deletion completed for:", uid);
 
       return { success: true };
     } catch (error: any) {
@@ -430,6 +587,7 @@ export const authService = {
       return {
         success: false,
         error: getAuthErrorMessage(error.code),
+        code: error.code,
       };
     }
   },
@@ -463,6 +621,7 @@ export const authService = {
       return {
         success: false,
         error: getAuthErrorMessage(error.code),
+        code: error.code,
       };
     }
   },
@@ -505,8 +664,35 @@ export const authService = {
       return {
         success: false,
         error: getAuthErrorMessage(error.code),
+        code: error.code,
       };
     }
+  },
+
+  // ----------------------------------------------------------
+  // UTILITAIRES PUBLICS
+  // ----------------------------------------------------------
+
+  /**
+   * Vérifie si une date de naissance correspond à un utilisateur majeur (18+)
+   * Utile pour la validation côté UI avant inscription
+   * 
+   * @param dateOfBirth - Date de naissance
+   * @returns true si 18+, false sinon
+   */
+  isAdult(dateOfBirth: Date): boolean {
+    return isAdult(dateOfBirth);
+  },
+
+  /**
+   * Calcule l'âge à partir d'une date de naissance
+   * Utile pour affichage côté UI
+   * 
+   * @param dateOfBirth - Date de naissance
+   * @returns Âge en années
+   */
+  calculateAge(dateOfBirth: Date): number {
+    return calculateAge(dateOfBirth);
   },
 };
 
