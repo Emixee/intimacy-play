@@ -38,13 +38,13 @@ import { PRICING, PREMIUM_FEATURES } from "../../utils/constants";
 /** URL des CGV */
 const CGV_URL = "https://intimacy-play.com/terms";
 
-/** Tableau comparatif */
+/** Tableau comparatif - Corrigé selon les règles business */
 const COMPARISON_TABLE = [
-  { feature: "Niveaux 1-2", free: true, premium: true },
-  { feature: "Niveaux 3-4 (Érotique & Explicite)", free: false, premium: true },
+  { feature: "Niveaux 1-3 (Romantique, Sensuel, Érotique)", free: true, premium: true },
+  { feature: "Niveau 4 (Explicite) 🔥", free: false, premium: true },
   { feature: "2 thèmes de base", free: true, premium: true },
   { feature: "22 thèmes exclusifs", free: false, premium: true },
-  { feature: "Jusqu'à 10 défis par session", free: true, premium: true },
+  { feature: "Jusqu'à 15 défis par session", free: true, premium: true },
   { feature: "Jusqu'à 50 défis par session", free: false, premium: true },
   { feature: "3 parties par jour", free: true, premium: false },
   { feature: "Parties illimitées", free: false, premium: true },

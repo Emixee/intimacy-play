@@ -60,9 +60,9 @@ const FEATURE_DISPLAY: Record<
 > = {
   level4: {
     icon: "flame",
-    title: "Niveaux Explicites",
+    title: "Niveau Explicite 🔥",
     description: "Accédez aux défis les plus audacieux",
-    benefit: "Débloquez les niveaux 3 et 4 pour une expérience sans limites",
+    benefit: "Débloquez le niveau 4 (Explicite) pour une expérience sans limites",
   },
   unlimitedChanges: {
     icon: "refresh",
@@ -134,7 +134,7 @@ const FEATURE_DISPLAY: Record<
 
 /** Avantages à afficher dans la liste */
 const QUICK_BENEFITS = [
-  { icon: "flame", text: "Tous les niveaux débloqués" },
+  { icon: "flame", text: "Niveau 4 (Explicite) débloqué" },
   { icon: "color-palette", text: "22 thèmes exclusifs" },
   { icon: "infinite", text: "Parties illimitées" },
   { icon: "ban", text: "Sans publicité" },

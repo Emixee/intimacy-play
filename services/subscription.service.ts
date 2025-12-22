@@ -31,7 +31,7 @@ import { PRICING, LIMITS, REACTIONS_PREMIUM, THEMES_PREMIUM } from "../utils/con
 
 /** Features Premium disponibles */
 export type PremiumFeature =
-  | "level4"              // Accès aux niveaux 3-4
+  | "level4"              // Accès au niveau 4 (Explicite)
   | "unlimitedChanges"    // Changements de défi illimités
   | "premiumReactions"    // Réactions 🥵💦👅🍑😈💋
   | "mediaPreferences"    // Préférences de types de médias
@@ -39,7 +39,7 @@ export type PremiumFeature =
   | "premiumThemes"       // Thèmes 3-24 (premium)
   | "downloadMedia"       // Télécharger les médias reçus
   | "partnerChallenge"    // Créer un défi pour le partenaire (2 premium requis)
-  | "extendedChallenges"  // Plus de 10 défis par session
+  | "extendedChallenges"  // Plus de 15 défis par session
   | "unlimitedGames"      // Parties illimitées par jour
   | "noAds"               // Sans publicités
   | "allToys";            // Accès aux défis avec jouets
