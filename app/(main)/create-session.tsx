@@ -1,6 +1,10 @@
 /**
  * Écran de création de session
  *
+ * PROMPT 1.3-v3 : Préférences séparées par joueur
+ * - Le créateur utilise SES préférences (user.preferences)
+ * - Le partenaire aura ses défis régénérés quand il rejoint
+ *
  * Permet de configurer :
  * - Niveau d'intensité de départ (1-4)
  * - Nombre de défis PAR JOUEUR (5-50)
@@ -11,8 +15,8 @@
  * - Durée estimée basée sur le total réel
  *
  * GAME-MECHANICS:
- * - Gratuit : niveaux 1-2, max 15 défis par joueur (INCLUS)
- * - Premium : niveaux 3-4, max 50 défis par joueur
+ * - Gratuit : niveaux 1-3, max 15 défis par joueur (INCLUS)
+ * - Premium : niveau 4, max 50 défis par joueur
  * 
  * FIX: 15 défis est maintenant correctement gratuit
  */
@@ -33,7 +37,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { Button, Card } from "../../components/ui";
 import { useAuth } from "../../hooks/useAuth";
 import { sessionService } from "../../services/session.service";
-import { selectChallenges, SelectionConfig } from "../../utils/challengeSelector";
+import { 
+  selectChallenges, 
+  SelectionConfig,
+  PlayerPreferences,
+  DEFAULT_PLAYER_PREFERENCES,
+} from "../../utils/challengeSelector";
 import {
   IntensityLevel,
   INTENSITY_LEVELS,
@@ -242,12 +251,50 @@ function RulesInfo({ isPremium }: { isPremium: boolean }) {
             </Text>
             <Text className="text-blue-700 text-sm leading-5">
               • Chaque joueur a le même nombre de défis{"\n"}
+              • Les défis sont adaptés à vos préférences{"\n"}
               • Les défis alternent entre vous et votre partenaire{"\n"}
               • Chacun réalise son défi et envoie une preuve{"\n"}
               • L'autre valide après avoir reçu la preuve{"\n"}
               • {MAX_CHALLENGE_CHANGES} changements de défi par partie
               {!isPremium && "\n• Passez Premium pour plus d'options !"}
             </Text>
+          </View>
+        </View>
+      </Card.Content>
+    </Card>
+  );
+}
+
+/**
+ * Affiche les thèmes sélectionnés du créateur
+ */
+function SelectedThemesInfo({ themes }: { themes: string[] }) {
+  if (themes.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card className="mb-6">
+      <Card.Content>
+        <View className="flex-row items-start">
+          <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center mr-3">
+            <Ionicons name="heart" size={24} color="#EC4899" />
+          </View>
+          <View className="flex-1">
+            <Text className="text-pink-800 font-semibold mb-1">
+              Vos thèmes actifs
+            </Text>
+            <Text className="text-pink-700 text-sm">
+              {themes.join(", ")}
+            </Text>
+            <Pressable 
+              onPress={() => router.push("/preferences")}
+              className="mt-2"
+            >
+              <Text className="text-pink-500 text-sm underline">
+                Modifier mes préférences →
+              </Text>
+            </Pressable>
           </View>
         </View>
       </Card.Content>
@@ -309,6 +356,27 @@ export default function CreateSessionScreen() {
   const selectedLevelInfo = useMemo(() => {
     return INTENSITY_LEVELS.find((l) => l.level === selectedIntensity);
   }, [selectedIntensity]);
+
+  /** 
+   * Préférences du créateur (depuis son profil)
+   * PROMPT 1.3-v3 : Utilise les préférences réelles du créateur
+   */
+  const creatorPreferences: PlayerPreferences = useMemo(() => {
+    if (!userData?.preferences) {
+      return DEFAULT_PLAYER_PREFERENCES;
+    }
+
+    return {
+      selectedThemes: userData.preferences.themes || ["classique"],
+      includeToys: (userData.preferences.toys?.length || 0) > 0 && isPremium,
+      availableToys: userData.preferences.toys || [],
+      mediaPreferences: userData.preferences.mediaPreferences || {
+        photo: true,
+        audio: true,
+        video: true,
+      },
+    };
+  }, [userData?.preferences, isPremium]);
 
   /** Vérifie si la configuration actuelle est valide */
   const isConfigValid = useMemo(() => {
@@ -380,6 +448,9 @@ export default function CreateSessionScreen() {
 
   /**
    * Crée la session
+   * 
+   * PROMPT 1.3-v3 : Utilise les préférences du créateur
+   * Les défis du partenaire seront régénérés quand il rejoint
    */
   const handleCreateSession = async () => {
     if (!userData) {
@@ -401,22 +472,19 @@ export default function CreateSessionScreen() {
       // Genre du partenaire (par défaut opposé, sera mis à jour quand il rejoint)
       const partnerGender = userData.gender === "homme" ? "femme" : "homme";
 
-      // Configuration pour le nouvel algorithme de sélection
+      // ============================================================
+      // PROMPT 1.3-v3 : Configuration avec préférences séparées
+      // ============================================================
       const selectionConfig: SelectionConfig = {
         creatorGender: userData.gender,
         partnerGender: partnerGender,
         count: totalChallenges, // Total de défis (count * 2)
         startIntensity: selectedIntensity,
         isPremium: isPremium,
-        // Options par défaut (à personnaliser plus tard dans l'UI)
-        selectedThemes: [], // Vide = tous les thèmes
-        includeToys: false, // Pas de jouets par défaut
-        availableToys: [],
-        mediaPreferences: {
-          photo: true,
-          audio: true,
-          video: true,
-        },
+        // Préférences du créateur (depuis son profil)
+        creatorPreferences: creatorPreferences,
+        // Préférences par défaut pour le partenaire (sera mis à jour quand il rejoint)
+        partnerPreferences: DEFAULT_PLAYER_PREFERENCES,
       };
 
       // Générer les défis avec le nouvel algorithme
@@ -429,6 +497,7 @@ export default function CreateSessionScreen() {
 
       // Log des statistiques
       console.log("[CreateSession] Stats:", selectionResult.stats);
+      console.log("[CreateSession] Creator themes:", creatorPreferences.selectedThemes);
 
       // Créer la session avec les défis sélectionnés
       const result = await sessionService.createSession(
@@ -437,6 +506,8 @@ export default function CreateSessionScreen() {
         {
           challengeCount: selectionResult.challenges.length,
           startIntensity: selectedIntensity,
+          creatorPreferences: creatorPreferences,
+          partnerPreferences: DEFAULT_PLAYER_PREFERENCES,
         },
         selectionResult.challenges,
         isPremium
@@ -485,6 +556,9 @@ export default function CreateSessionScreen() {
 
         {/* Info sur les règles */}
         <RulesInfo isPremium={isPremium} />
+
+        {/* Thèmes sélectionnés du créateur */}
+        <SelectedThemesInfo themes={creatorPreferences.selectedThemes} />
 
         {/* Section Intensité */}
         <View className="mb-6">
