@@ -37,28 +37,19 @@ interface AuthState {
 }
 
 // ============================================================
-// VARIABLES GLOBALES (SINGLETON)
+// SINGLETON STATE
 // ============================================================
 
-let isAuthInitialized = false;
-let authUnsubscribe: (() => void) | null = null;
-let userDataUnsubscribe: (() => void) | null = null;
+interface ListenerState {
+  isInitialized: boolean;
+  authUnsubscribe: (() => void) | null;
+  userDataUnsubscribe: (() => void) | null;
+}
 
-// Helper pour cleanup les listeners de manière sécurisée
-const cleanupUserDataListener = () => {
-  if (userDataUnsubscribe !== null) {
-    userDataUnsubscribe();
-    userDataUnsubscribe = null;
-  }
-};
-
-const cleanupAllListeners = () => {
-  if (authUnsubscribe !== null) {
-    authUnsubscribe();
-    authUnsubscribe = null;
-  }
-  cleanupUserDataListener();
-  isAuthInitialized = false;
+const listenerState: ListenerState = {
+  isInitialized: false,
+  authUnsubscribe: null,
+  userDataUnsubscribe: null,
 };
 
 // ============================================================
@@ -87,27 +78,30 @@ export const useAuthStore = create<AuthState>()(
     // Initialize auth listener (singleton)
     initializeAuth: () => {
       // Éviter les initialisations multiples
-      if (isAuthInitialized) {
+      if (listenerState.isInitialized) {
         console.log("[AuthStore] Already initialized, skipping");
         return () => {};
       }
       
-      isAuthInitialized = true;
+      listenerState.isInitialized = true;
       console.log("[AuthStore] Initializing auth listener");
       
       // Listener principal d'authentification
-      authUnsubscribe = auth().onAuthStateChanged(async (user) => {
+      listenerState.authUnsubscribe = auth().onAuthStateChanged(async (user) => {
         console.log("[AuthStore] Auth state changed:", user?.uid ?? "null");
         
         // Cleanup previous user data listener
-        cleanupUserDataListener();
+        if (listenerState.userDataUnsubscribe) {
+          listenerState.userDataUnsubscribe();
+          listenerState.userDataUnsubscribe = null;
+        }
         
         if (user) {
           // Utilisateur connecté
           set({ firebaseUser: user });
           
           // Écouter les changements des données utilisateur
-          userDataUnsubscribe = firestore()
+          listenerState.userDataUnsubscribe = firestore()
             .collection("users")
             .doc(user.uid)
             .onSnapshot(
@@ -153,7 +147,18 @@ export const useAuthStore = create<AuthState>()(
       // Retourne la fonction de cleanup
       return () => {
         console.log("[AuthStore] Cleaning up auth listeners");
-        cleanupAllListeners();
+        
+        if (listenerState.authUnsubscribe) {
+          listenerState.authUnsubscribe();
+          listenerState.authUnsubscribe = null;
+        }
+        
+        if (listenerState.userDataUnsubscribe) {
+          listenerState.userDataUnsubscribe();
+          listenerState.userDataUnsubscribe = null;
+        }
+        
+        listenerState.isInitialized = false;
       };
     },
   }))
