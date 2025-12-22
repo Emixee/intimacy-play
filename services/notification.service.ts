@@ -1,10 +1,11 @@
 /**
- * Service de notifications - Version safe pour Expo Go
+ * Service de notifications - Version ultra-safe
  * 
  * Gère gracieusement le cas où Firebase Messaging n'est pas disponible
- * (notamment dans Expo Go qui ne supporte pas les modules natifs)
+ * - Expo Go : pas de modules natifs
+ * - Dev build sans module natif correctement lié
  * 
- * CORRECTIF : Détection Expo Go avant tentative de chargement du module
+ * CORRECTIF : Test réel du module natif avant utilisation
  */
 
 import { Platform } from 'react-native';
@@ -37,8 +38,8 @@ const isExpoGo = (): boolean => {
 };
 
 /**
- * Vérifie si Firebase Messaging est disponible
- * Ne tente même pas de charger le module si on est dans Expo Go
+ * Vérifie si Firebase Messaging est vraiment disponible et fonctionnel
+ * Teste le module natif pour éviter les crashs
  */
 const checkMessagingAvailable = (): boolean => {
   // Déjà vérifié
@@ -63,10 +64,11 @@ const checkMessagingAvailable = (): boolean => {
     return false;
   }
 
-  // Tenter de charger le module (build EAS uniquement)
+  // Tenter de charger le module (build EAS/dev uniquement)
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    messagingModule = require('@react-native-firebase/messaging').default;
+    const firebaseMessaging = require('@react-native-firebase/messaging');
+    messagingModule = firebaseMessaging.default || firebaseMessaging;
     
     // Vérifie que c'est bien une fonction
     if (typeof messagingModule !== 'function') {
@@ -76,11 +78,26 @@ const checkMessagingAvailable = (): boolean => {
       return false;
     }
     
-    console.log('[NotificationService] Firebase Messaging available');
-    isMessagingAvailable = true;
-    return true;
+    // TEST CRUCIAL : Vérifier que le module natif est vraiment disponible
+    // En appelant messaging() on déclenche l'erreur si le natif n'est pas là
+    try {
+      const instance = messagingModule();
+      // Vérifier qu'on peut accéder à une propriété/méthode
+      if (!instance || typeof instance.getToken !== 'function') {
+        throw new Error('Invalid messaging instance');
+      }
+      console.log('[NotificationService] Firebase Messaging native module OK');
+      isMessagingAvailable = true;
+      return true;
+    } catch (nativeError: any) {
+      console.log('[NotificationService] Native module not available:', nativeError.message);
+      console.log('[NotificationService] Try rebuilding: rm -rf android && npx expo prebuild && npx expo run:android');
+      messagingModule = null;
+      isMessagingAvailable = false;
+      return false;
+    }
   } catch (error: any) {
-    console.log('[NotificationService] Firebase Messaging not available:', error.message);
+    console.log('[NotificationService] Firebase Messaging not installed:', error.message);
     messagingModule = null;
     isMessagingAvailable = false;
     return false;
@@ -110,11 +127,11 @@ export const notificationService = {
    * Initialise les notifications (demande permission + récupère token)
    */
   async initialize(): Promise<NotificationInitResult> {
-    // Vérifier la disponibilité
+    // Vérifier la disponibilité (inclut le test du module natif)
     if (!checkMessagingAvailable()) {
       const reason = isExpoGo() 
         ? 'Notifications désactivées dans Expo Go. Faites un build EAS pour les activer.'
-        : 'Notifications non disponibles sur cet appareil';
+        : 'Module Firebase Messaging non disponible. Essayez de rebuild le projet.';
       
       console.log('[NotificationService] Skipping init -', reason);
       return {
@@ -124,13 +141,13 @@ export const notificationService = {
     }
 
     try {
-      const messaging = messagingModule;
+      const messaging = messagingModule();
 
       // Demander la permission
-      const authStatus = await messaging().requestPermission();
+      const authStatus = await messaging.requestPermission();
       const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        authStatus === messagingModule.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messagingModule.AuthorizationStatus.PROVISIONAL;
 
       if (!enabled) {
         console.log('[NotificationService] Permission denied');
@@ -141,7 +158,7 @@ export const notificationService = {
       }
 
       // Récupérer le token FCM
-      const token = await messaging().getToken();
+      const token = await messaging.getToken();
       console.log('[NotificationService] Token obtained:', token?.substring(0, 20) + '...');
 
       return {
@@ -169,11 +186,11 @@ export const notificationService = {
     }
 
     try {
-      const messaging = messagingModule;
-      const authStatus = await messaging().requestPermission();
+      const messaging = messagingModule();
+      const authStatus = await messaging.requestPermission();
       const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        authStatus === messagingModule.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messagingModule.AuthorizationStatus.PROVISIONAL;
 
       return {
         success: true,
@@ -197,8 +214,8 @@ export const notificationService = {
     }
 
     try {
-      const messaging = messagingModule;
-      return await messaging().getToken();
+      const messaging = messagingModule();
+      return await messaging.getToken();
     } catch (error) {
       console.error('[NotificationService] Get token error:', error);
       return null;
@@ -214,8 +231,8 @@ export const notificationService = {
     }
 
     try {
-      const messaging = messagingModule;
-      await messaging().subscribeToTopic(topic);
+      const messaging = messagingModule();
+      await messaging.subscribeToTopic(topic);
       console.log('[NotificationService] Subscribed to:', topic);
       return true;
     } catch (error) {
@@ -233,8 +250,8 @@ export const notificationService = {
     }
 
     try {
-      const messaging = messagingModule;
-      await messaging().unsubscribeFromTopic(topic);
+      const messaging = messagingModule();
+      await messaging.unsubscribeFromTopic(topic);
       console.log('[NotificationService] Unsubscribed from:', topic);
       return true;
     } catch (error) {
@@ -252,8 +269,8 @@ export const notificationService = {
     }
 
     try {
-      const messaging = messagingModule;
-      return messaging().onMessage(callback);
+      const messaging = messagingModule();
+      return messaging.onMessage(callback);
     } catch (error) {
       console.error('[NotificationService] onMessage error:', error);
       return null;
@@ -269,8 +286,8 @@ export const notificationService = {
     }
 
     try {
-      const messaging = messagingModule;
-      messaging().setBackgroundMessageHandler(handler);
+      const messaging = messagingModule();
+      messaging.setBackgroundMessageHandler(handler);
     } catch (error) {
       console.error('[NotificationService] setBackgroundMessageHandler error:', error);
     }
