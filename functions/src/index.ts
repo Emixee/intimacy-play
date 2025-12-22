@@ -1,10 +1,11 @@
 /**
  * Point d'entrée des Cloud Functions - Intimacy Play
  *
- * Ce fichier exporte toutes les Cloud Functions du projet.
+ * Firebase Functions v2 pour Node.js 20
  *
  * Déploiement complet :
  * cd functions
+ * npm install
  * npm run build
  * firebase deploy --only functions
  *

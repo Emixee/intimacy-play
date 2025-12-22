@@ -16,14 +16,25 @@ import {
   type SessionReaction,
   REACTIONS_FREE,
   REACTIONS_PREMIUM,
+  REACTION_EXPIRATION_SECONDS,
 } from "../types";
-import {
-  REACTION_DISPLAY_DURATION,
-  ERROR_MESSAGES,
-} from "../utils/constants";
 
 // Alias pour simplifier
 type Timestamp = FirebaseFirestoreTypes.Timestamp;
+
+// ============================================================
+// CONSTANTES
+// ============================================================
+
+/** Durée d'affichage des réactions en ms (5 secondes) */
+const REACTION_DISPLAY_DURATION = REACTION_EXPIRATION_SECONDS * 1000;
+
+/** Messages d'erreur */
+const ERROR_MESSAGES = {
+  PREMIUM_REQUIRED: "Cette réaction nécessite un abonnement Premium",
+  SESSION_NOT_FOUND: "Session introuvable",
+  UNKNOWN: "Une erreur est survenue",
+};
 
 // ============================================================
 // TYPES
@@ -48,7 +59,8 @@ export interface ReactionServiceConfig {
 
 class ReactionService {
   private config: Required<ReactionServiceConfig>;
-  private cleanupTimers: Map<string, NodeJS.Timeout> = new Map();
+  // Fix: Utiliser ReturnType<typeof setTimeout> au lieu de NodeJS.Timeout
+  private cleanupTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   constructor(config?: ReactionServiceConfig) {
     this.config = {
