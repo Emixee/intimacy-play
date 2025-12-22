@@ -11,8 +11,10 @@
  * - Durée estimée basée sur le total réel
  *
  * GAME-MECHANICS:
- * - Gratuit : niveaux 1-3, max 15 défis par joueur
- * - Premium : niveaux 1-4, max 50 défis par joueur
+ * - Gratuit : niveaux 1-2, max 15 défis par joueur (INCLUS)
+ * - Premium : niveaux 3-4, max 50 défis par joueur
+ * 
+ * FIX: 15 défis est maintenant correctement gratuit
  */
 
 import React, { useState, useMemo } from "react";
@@ -36,17 +38,30 @@ import {
   IntensityLevel,
   INTENSITY_LEVELS,
   MAX_CHALLENGE_CHANGES,
+  CHALLENGE_COUNT_FREE,
+  CHALLENGE_COUNT_PREMIUM,
 } from "../../types";
 
 // ============================================================
 // CONSTANTES
 // ============================================================
 
-/** Options de nombre de défis PAR JOUEUR selon le statut premium */
+/** 
+ * Options de nombre de défis PAR JOUEUR
+ * Utilise les constantes de types/index.ts pour cohérence
+ */
 const CHALLENGE_COUNT_OPTIONS = {
-  free: [5, 10, 15],
-  premium: [5, 10, 15, 20, 25, 30, 40, 50],
+  // Options gratuites : 5, 10, 15 (15 = max gratuit INCLUS)
+  free: [5, 10, CHALLENGE_COUNT_FREE.max],
+  // Options premium : toutes les options jusqu'à 50
+  premium: [5, 10, 15, 20, 25, 30, 40, CHALLENGE_COUNT_PREMIUM.max],
 };
+
+/** 
+ * Maximum de défis gratuits PAR JOUEUR
+ * FIX: 15 est INCLUS dans les options gratuites
+ */
+const MAX_FREE_CHALLENGE_COUNT = CHALLENGE_COUNT_FREE.max; // 15
 
 /** Minutes estimées par défi */
 const MINUTES_PER_CHALLENGE = 2;
@@ -159,6 +174,9 @@ function IntensityOption({
 
 /**
  * Sélecteur de nombre de défis PAR JOUEUR
+ * 
+ * FIX: La logique de verrouillage utilise maintenant > (strictement supérieur)
+ * Donc 15 n'est PAS verrouillé car 15 > 15 = false
  */
 function ChallengeCountSelector({
   counts,
@@ -177,6 +195,9 @@ function ChallengeCountSelector({
     <View className="flex-row flex-wrap">
       {counts.map((count) => {
         const isSelected = count === selected;
+        // FIX: > (strictement supérieur) signifie que maxFree (15) est INCLUS dans gratuit
+        // 15 > 15 = false, donc 15 n'est pas verrouillé
+        // 20 > 15 = true, donc 20 est verrouillé pour les non-premium
         const isLocked = count > maxFree && !isPremium;
 
         return (
@@ -257,9 +278,8 @@ export default function CreateSessionScreen() {
   // COMPUTED
   // ----------------------------------------------------------
 
-  /** Options de défis disponibles (premium = plus d'options) */
+  /** Options de défis disponibles (affiche toutes les options, verrouille les premium) */
   const availableCounts = CHALLENGE_COUNT_OPTIONS.premium;
-  const maxFreeCount = Math.max(...CHALLENGE_COUNT_OPTIONS.free);
 
   /** 
    * Total de défis dans la partie 
@@ -297,10 +317,11 @@ export default function CreateSessionScreen() {
     if (levelInfo?.isPremium && !isPremium) return false;
 
     // Vérifier le nombre de défis
-    if (selectedChallengeCount > maxFreeCount && !isPremium) return false;
+    // FIX: > (strictement supérieur) donc 15 est valide pour gratuit
+    if (selectedChallengeCount > MAX_FREE_CHALLENGE_COUNT && !isPremium) return false;
 
     return true;
-  }, [selectedIntensity, selectedChallengeCount, isPremium, maxFreeCount]);
+  }, [selectedIntensity, selectedChallengeCount, isPremium]);
 
   // ----------------------------------------------------------
   // HANDLERS
@@ -333,13 +354,16 @@ export default function CreateSessionScreen() {
 
   /**
    * Sélectionne un nombre de défis PAR JOUEUR
+   * 
+   * FIX: Utilise > (strictement supérieur) donc 15 est accepté pour gratuit
    */
   const handleSelectChallengeCount = (count: number) => {
-    // Si le count est premium et l'utilisateur non premium
-    if (count > maxFreeCount && !isPremium) {
+    // Si le count est SUPÉRIEUR au max gratuit et l'utilisateur non premium
+    // FIX: count > MAX (pas >=) donc 15 passe pour gratuit
+    if (count > MAX_FREE_CHALLENGE_COUNT && !isPremium) {
       Alert.alert(
         "Option Premium 👑",
-        `Les parties de plus de ${maxFreeCount} défis par joueur sont réservées aux membres Premium.`,
+        `Les parties de plus de ${MAX_FREE_CHALLENGE_COUNT} défis par joueur sont réservées aux membres Premium.`,
         [
           { text: "Annuler", style: "cancel" },
           {
@@ -494,12 +518,13 @@ export default function CreateSessionScreen() {
           </Text>
           <Text className="text-gray-500 mb-4">
             Chaque joueur aura ce nombre de défis à réaliser.
+            {!isPremium && ` (max ${MAX_FREE_CHALLENGE_COUNT} en gratuit)`}
           </Text>
 
           <ChallengeCountSelector
             counts={availableCounts}
             selected={selectedChallengeCount}
-            maxFree={maxFreeCount}
+            maxFree={MAX_FREE_CHALLENGE_COUNT}
             isPremium={isPremium}
             onSelect={handleSelectChallengeCount}
           />

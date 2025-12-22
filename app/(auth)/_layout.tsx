@@ -37,6 +37,14 @@ export default function AuthLayout() {
         animation: "slide_from_right",
       }}
     >
+      {/* Écran d'accueil (premier écran visible) */}
+      <Stack.Screen
+        name="welcome"
+        options={{
+          title: "Bienvenue",
+          animation: "fade",
+        }}
+      />
       <Stack.Screen
         name="login"
         options={{
