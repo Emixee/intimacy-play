@@ -14,6 +14,9 @@
  * 
  * FIX BUG COUPLES MÊME GENRE :
  * La validation utilise maintenant forPlayer (rôle) au lieu de forGender
+ * 
+ * FIX BUG 15 DÉFIS PREMIUM :
+ * La vérification utilise maintenant challengeCount / 2 (défis par joueur)
  */
 
 import { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
@@ -204,14 +207,29 @@ export const sessionService = {
 
   /**
    * Vérifie les restrictions premium pour la configuration
+   * 
+   * FIX BUG 15 DÉFIS :
+   * - challengeCount est le TOTAL de défis (count × 2)
+   * - On divise par 2 pour obtenir le nombre PAR JOUEUR
+   * - CHALLENGE_COUNT_FREE.max (15) est le max PAR JOUEUR
+   * - Donc 15 défis par joueur = 30 total → 30/2 = 15 → 15 > 15 = false → OK !
+   * 
    * @returns null si OK, sinon le message d'erreur
    */
   validatePremiumRestrictions: (
     config: ExtendedCreateSessionData,
     isPremium: boolean
   ): string | null => {
-    // Vérification nombre de défis (> 15 = premium)
-    if (config.challengeCount > CHALLENGE_COUNT_FREE.max && !isPremium) {
+    // ============================================================
+    // FIX BUG 15 DÉFIS PREMIUM
+    // challengeCount est le TOTAL, on divise par 2 pour avoir PAR JOUEUR
+    // ============================================================
+    const challengesPerPlayer = Math.ceil(config.challengeCount / 2);
+    
+    // Vérification nombre de défis PAR JOUEUR (> 15 = premium)
+    // 15 > 15 = false donc 15 est accepté pour gratuit
+    if (challengesPerPlayer > CHALLENGE_COUNT_FREE.max && !isPremium) {
+      console.log(`[SessionService] Premium check: ${challengesPerPlayer} per player > ${CHALLENGE_COUNT_FREE.max} max free`);
       return getSessionErrorMessage("CHALLENGE_COUNT_EXCEEDED");
     }
 
@@ -232,7 +250,7 @@ export const sessionService = {
    * Crée une nouvelle session avec vérifications premium
    * 
    * PROMPT 4.2 : Ajout des vérifications :
-   * - challengeCount > 15 → vérifier premium
+   * - challengeCount > 15 PAR JOUEUR → vérifier premium
    * - startIntensity > 3 → vérifier premium  
    * - includeToys → vérifier premium
    * 
@@ -299,7 +317,7 @@ export const sessionService = {
 
       await sessionsCollection().doc(normalizedCode).set(sessionData);
 
-      console.log(`[SessionService] Session created: ${sessionCode}`);
+      console.log(`[SessionService] Session created: ${sessionCode} (${config.challengeCount} total challenges, ${Math.ceil(config.challengeCount / 2)} per player)`);
 
       return {
         success: true,
