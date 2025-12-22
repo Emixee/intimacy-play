@@ -16,17 +16,24 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Récupère les données utilisateur
+    // Récupère les données utilisateur (avec gestion d'erreur)
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
     
-    // Vérifie si l'utilisateur est premium
+    // Vérifie si l'utilisateur est premium (avec gestion d'erreur)
     function isPremium() {
-      let userData = getUserData();
-      return userData.premium == true && 
-             userData.premiumUntil != null && 
-             userData.premiumUntil > request.time;
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null && 
+             userDoc.data != null &&
+             userDoc.data.premium == true && 
+             userDoc.data.premiumUntil != null && 
+             userDoc.data.premiumUntil > request.time;
+    }
+    
+    // Vérifie si l'utilisateur existe (pour éviter les erreurs)
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
     
     // Vérifie qu'une valeur est un genre valide
@@ -58,6 +65,20 @@ service cloud.firestore {
     function isSessionMember(sessionData) {
       return request.auth.uid == sessionData.creatorId || 
              request.auth.uid == sessionData.partnerId;
+    }
+    
+    // ============================================================
+    // LIMITES GRATUITES vs PREMIUM (PROMPT 1.3-v3)
+    // ============================================================
+    
+    // Nombre max de défis TOTAL pour gratuit (15 par joueur × 2 = 30)
+    function maxFreeChallengeCount() {
+      return 30;
+    }
+    
+    // Nombre max de défis TOTAL pour premium (50 par joueur × 2 = 100)
+    function maxPremiumChallengeCount() {
+      return 100;
     }
     
     // ============================================================
@@ -109,20 +130,22 @@ service cloud.firestore {
       // Lecture : tout utilisateur authentifié (pour rejoindre via code)
       allow read: if isAuthenticated();
       
-      // Création : utilisateur authentifié
+      // Création : utilisateur authentifié avec profil existant
+      // PROMPT 1.3-v3 : Correction des limites (30 défis gratuit, 100 premium)
       allow create: if isAuthenticated() &&
+        userExists() &&
         request.resource.data.creatorId == request.auth.uid &&
         isValidGender(request.resource.data.creatorGender) &&
         request.resource.data.partnerId == null &&
         request.resource.data.partnerGender == null &&
         request.resource.data.status == 'waiting' &&
-        request.resource.data.challengeCount >= 5 &&
-        request.resource.data.challengeCount <= 50 &&
+        request.resource.data.challengeCount >= 10 &&
+        request.resource.data.challengeCount <= 100 &&
         isValidIntensity(request.resource.data.startIntensity) &&
         // Vérification premium pour intensité 4
         (!intensityRequiresPremium(request.resource.data.startIntensity) || isPremium()) &&
-        // Vérification premium pour > 10 défis
-        (request.resource.data.challengeCount <= 10 || isPremium()) &&
+        // Vérification premium pour > 30 défis (15 par joueur × 2)
+        (request.resource.data.challengeCount <= maxFreeChallengeCount() || isPremium()) &&
         request.resource.data.currentChallengeIndex == 0 &&
         request.resource.data.currentPlayer == 'creator' &&
         request.resource.data.startedAt == null &&
