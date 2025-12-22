@@ -2,6 +2,7 @@
  * Types TypeScript pour Intimacy Play
  * 
  * PROMPT 4.3 : Ajout des types pour défis partenaires
+ * PROMPT 1.3 v2 : Thèmes basés sur defis_couple_distance_v4.xlsx (24 thèmes)
  * 
  * Aligné avec le code existant ET FIRESTORE-SCHEMA.md
  * Compatible avec services/session.service.ts, services/game.service.ts, etc.
@@ -41,36 +42,37 @@ export type MessageType = "text" | "photo" | "video" | "audio";
 export type Language = "fr" | "en";
 
 // ============================================================
-// THÈMES
+// THÈMES (24 thèmes basés sur defis_couple_distance_v4.xlsx)
 // ============================================================
 
-/** Thèmes gratuits */
-export const THEMES_FREE = ["romantic", "sensual"] as const;
+/** Thème gratuit (disponible N1-N4) */
+export const THEMES_FREE = ["classique"] as const;
 
-/** Thèmes premium */
+/** Thèmes premium (23 thèmes) */
 export const THEMES_PREMIUM = [
-  "torrid",
-  "fantasies",
-  "roleplay",
-  "domination",
-  "submission",
-  "bdsm_light",
-  "voyeurism",
-  "exhibitionism",
-  "foreplay",
-  "fellatio",
-  "cunnilingus",
-  "kamasutra",
-  "shower",
-  "massage",
-  "food",
-  "temperature",
+  "lingerie",
+  "dom_sub",
+  "sperme",
+  "jouets",
+  "oral",
+  "cyprine",
+  "exhib",
+  "body_writing",
+  "feminisation",
+  "pegging",
+  "sm",
   "dirty_talk",
-  "sexting",
-  "surprises",
-  "quickie",
-  "tantrism",
-  "random",
+  "latex_cuir",
+  "bondage",
+  "anal",
+  "food_play",
+  "edging",
+  "masturbation_guidee",
+  "humiliation",
+  "jeu_de_role",
+  "temperature",
+  "worship",
+  "cbt",
 ] as const;
 
 /** Tous les thèmes disponibles */
@@ -228,7 +230,7 @@ export interface UserPreferences {
 
 /** Préférences par défaut pour un nouvel utilisateur */
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
-  themes: ["romantic", "sensual"],
+  themes: ["classique"],
   toys: [],
   mediaPreferences: {
     photo: true,

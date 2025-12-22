@@ -1,6 +1,8 @@
 /**
  * Constantes globales - Intimacy Play
  * 
+ * PROMPT 1.3 v3 : Thèmes basés sur defis_couple_distance_v4.xlsx (24 thèmes)
+ * 
  * Contient toutes les constantes de configuration de l'application :
  * - App info
  * - Limites de session
@@ -35,39 +37,211 @@ export const ALL_REACTIONS = [...REACTIONS_FREE, ...REACTIONS_PREMIUM] as const;
 export const REACTION_DISPLAY_DURATION = 5000;
 
 // ============================================================
-// THÈMES (24 au total)
+// THÈMES (24 thèmes - basés sur defis_couple_distance_v4.xlsx)
 // ============================================================
 
-/** Thèmes gratuits (2) */
+/** Thème gratuit (1) - Disponible niveaux 1-4 */
 export const THEMES_FREE = [
-  { id: "romantic", name: "Romantique", emoji: "💕", description: "Doux et tendre" },
-  { id: "sensual", name: "Sensuel", emoji: "💋", description: "Séduction et caresses" },
+  { 
+    id: "classique", 
+    name: "Classique", 
+    emoji: "💕", 
+    description: "Défis romantiques et sensuels",
+    challengeCount: 258,
+    levels: [1, 2, 3, 4],
+  },
 ] as const;
 
-/** Thèmes premium (22) */
+/** Thèmes premium (23) - Disponibles niveaux 2-4 selon le thème */
 export const THEMES_PREMIUM = [
-  { id: "torrid", name: "Torride", emoji: "🔥", description: "Passion intense" },
-  { id: "fantasies", name: "Fantasmes", emoji: "💭", description: "Réalise tes rêves" },
-  { id: "roleplay", name: "Jeux de rôle", emoji: "🎭", description: "Deviens qui tu veux" },
-  { id: "domination", name: "Domination", emoji: "👑", description: "Prends le contrôle" },
-  { id: "submission", name: "Soumission", emoji: "🔗", description: "Laisse-toi guider" },
-  { id: "bdsm_light", name: "BDSM Light", emoji: "⛓️", description: "Initiation douce" },
-  { id: "voyeurism", name: "Voyeurisme", emoji: "👀", description: "Le plaisir de regarder" },
-  { id: "exhibitionism", name: "Exhibitionnisme", emoji: "📸", description: "Ose te montrer" },
-  { id: "foreplay", name: "Préliminaires", emoji: "🌡️", description: "L'art de faire monter" },
-  { id: "fellatio", name: "Fellation", emoji: "👄", description: "Plaisir oral masculin" },
-  { id: "cunnilingus", name: "Cunnilingus", emoji: "👅", description: "Plaisir oral féminin" },
-  { id: "kamasutra", name: "Kamasutra", emoji: "🧘", description: "Positions créatives" },
-  { id: "shower", name: "Sous la douche", emoji: "🚿", description: "Plaisir aquatique" },
-  { id: "massage", name: "Massage", emoji: "💆", description: "Détente sensuelle" },
-  { id: "food", name: "Food Play", emoji: "🍓", description: "Gourmandises coquines" },
-  { id: "temperature", name: "Chaud/Froid", emoji: "🧊", description: "Jeux de température" },
-  { id: "dirty_talk", name: "Dirty Talk", emoji: "🗣️", description: "Mots qui excitent" },
-  { id: "sexting", name: "Sexting", emoji: "📱", description: "Messages torrides" },
-  { id: "surprises", name: "Surprises", emoji: "🎁", description: "L'inattendu" },
-  { id: "quickie", name: "Quickie", emoji: "⚡", description: "Vite et intense" },
-  { id: "tantrism", name: "Tantrisme", emoji: "🕉️", description: "Connexion spirituelle" },
-  { id: "random", name: "Aléatoire", emoji: "🎲", description: "Laisse le hasard décider" },
+  { 
+    id: "lingerie", 
+    name: "Lingerie", 
+    emoji: "👙", 
+    description: "Jeux avec sous-vêtements sexy",
+    challengeCount: 24,
+    levels: [2, 3, 4],
+  },
+  { 
+    id: "dom_sub", 
+    name: "Dom/Sub", 
+    emoji: "👑", 
+    description: "Domination et soumission",
+    challengeCount: 36,
+    levels: [3, 4],
+  },
+  { 
+    id: "sperme", 
+    name: "Sperme", 
+    emoji: "💦", 
+    description: "Jeux avec éjaculation",
+    challengeCount: 34,
+    levels: [4],
+    warning: "Contenu explicite",
+  },
+  { 
+    id: "jouets", 
+    name: "Jouets", 
+    emoji: "📳", 
+    description: "Défis avec sextoys",
+    challengeCount: 32,
+    levels: [3, 4],
+  },
+  { 
+    id: "oral", 
+    name: "Oral", 
+    emoji: "👄", 
+    description: "Plaisir buccal",
+    challengeCount: 30,
+    levels: [3, 4],
+  },
+  { 
+    id: "cyprine", 
+    name: "Cyprine", 
+    emoji: "💧", 
+    description: "Jeux avec mouille féminine",
+    challengeCount: 23,
+    levels: [3, 4],
+  },
+  { 
+    id: "exhib", 
+    name: "Exhib/Voyeurisme", 
+    emoji: "👀", 
+    description: "Se montrer et regarder",
+    challengeCount: 21,
+    levels: [3, 4],
+  },
+  { 
+    id: "body_writing", 
+    name: "Body Writing", 
+    emoji: "✍️", 
+    description: "Écrire sur le corps",
+    challengeCount: 19,
+    levels: [3, 4],
+  },
+  { 
+    id: "feminisation", 
+    name: "Féminisation", 
+    emoji: "💄", 
+    description: "Travestissement et féminisation",
+    challengeCount: 17,
+    levels: [3, 4],
+  },
+  { 
+    id: "pegging", 
+    name: "Pegging", 
+    emoji: "🍆", 
+    description: "Pénétration inversée",
+    challengeCount: 16,
+    levels: [3, 4],
+  },
+  { 
+    id: "sm", 
+    name: "S&M", 
+    emoji: "⛓️", 
+    description: "Sadisme et masochisme",
+    challengeCount: 16,
+    levels: [3, 4],
+  },
+  { 
+    id: "dirty_talk", 
+    name: "Dirty Talk", 
+    emoji: "🗣️", 
+    description: "Mots crus et excitants",
+    challengeCount: 16,
+    levels: [3, 4],
+  },
+  { 
+    id: "latex_cuir", 
+    name: "Latex/Cuir", 
+    emoji: "🖤", 
+    description: "Fétichisme du latex et cuir",
+    challengeCount: 15,
+    levels: [3, 4],
+  },
+  { 
+    id: "bondage", 
+    name: "Bondage", 
+    emoji: "🔗", 
+    description: "Attaches et contraintes",
+    challengeCount: 14,
+    levels: [3, 4],
+  },
+  { 
+    id: "anal", 
+    name: "Anal", 
+    emoji: "🍑", 
+    description: "Plaisir anal",
+    challengeCount: 13,
+    levels: [4],
+    warning: "Contenu explicite",
+  },
+  { 
+    id: "food_play", 
+    name: "Food Play", 
+    emoji: "🍓", 
+    description: "Jeux avec nourriture",
+    challengeCount: 11,
+    levels: [4],
+  },
+  { 
+    id: "edging", 
+    name: "Edging", 
+    emoji: "⏱️", 
+    description: "Contrôle de l'orgasme",
+    challengeCount: 10,
+    levels: [4],
+  },
+  { 
+    id: "masturbation_guidee", 
+    name: "Masturbation guidée", 
+    emoji: "🎯", 
+    description: "Instructions de plaisir",
+    challengeCount: 10,
+    levels: [4],
+  },
+  { 
+    id: "humiliation", 
+    name: "Humiliation", 
+    emoji: "😳", 
+    description: "Jeux d'humiliation consentie",
+    challengeCount: 8,
+    levels: [4],
+    warning: "Contenu sensible",
+  },
+  { 
+    id: "jeu_de_role", 
+    name: "Jeu de rôle", 
+    emoji: "🎭", 
+    description: "Incarner des personnages",
+    challengeCount: 8,
+    levels: [4],
+  },
+  { 
+    id: "temperature", 
+    name: "Température", 
+    emoji: "🧊", 
+    description: "Chaud et froid",
+    challengeCount: 6,
+    levels: [4],
+  },
+  { 
+    id: "worship", 
+    name: "Worship", 
+    emoji: "🙏", 
+    description: "Adoration du corps",
+    challengeCount: 6,
+    levels: [4],
+  },
+  { 
+    id: "cbt", 
+    name: "CBT", 
+    emoji: "⚠️", 
+    description: "Torture génitale masculine",
+    challengeCount: 5,
+    levels: [4],
+    warning: "Contenu extrême",
+  },
 ] as const;
 
 /** Tous les thèmes */
@@ -78,6 +252,16 @@ export const THEME_IDS_FREE = THEMES_FREE.map((t) => t.id);
 
 /** IDs des thèmes premium */
 export const THEME_IDS_PREMIUM = THEMES_PREMIUM.map((t) => t.id);
+
+/** Récupère un thème par son ID */
+export const getThemeById = (id: string) => {
+  return ALL_THEMES.find((t) => t.id === id);
+};
+
+/** Vérifie si un thème est premium */
+export const isThemePremium = (id: string): boolean => {
+  return THEME_IDS_PREMIUM.includes(id);
+};
 
 // ============================================================
 // JOUETS (10)
@@ -189,8 +373,8 @@ export const PREMIUM_FEATURES = [
   {
     id: "all_themes",
     icon: "🎭",
-    title: "22 thèmes exclusifs",
-    description: "Roleplay, BDSM, Fantasmes et plus",
+    title: "23 thèmes exclusifs",
+    description: "Dom/Sub, Bondage, Oral et plus",
   },
   {
     id: "unlimited_challenges",
@@ -431,6 +615,7 @@ export default {
   REACTIONS_PREMIUM,
   THEMES_FREE,
   THEMES_PREMIUM,
+  ALL_THEMES,
   TOYS,
   LIMITS,
   PRICING,
