@@ -8,25 +8,61 @@
  * - Auth : Authentification email/password
  * - Firestore : Base de données temps réel
  * - Storage : Stockage de médias (photos, vidéos, audio)
- * - Messaging : Notifications push (FCM)
+ * - Messaging : Notifications push (FCM) - CONDITIONNEL (pas dans Expo Go)
+ * 
+ * CORRECTIF : Import conditionnel de messaging pour éviter crash dans Expo Go
  */
 
 import auth, { FirebaseAuthTypes } from "@react-native-firebase/auth";
 import firestore, { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
 import storage, { FirebaseStorageTypes } from "@react-native-firebase/storage";
-import messaging, { FirebaseMessagingTypes } from "@react-native-firebase/messaging";
+import Constants from "expo-constants";
+
+// ============================================================
+// MESSAGING CONDITIONNEL
+// ============================================================
+
+/**
+ * Vérifie si on est dans Expo Go (pas de modules natifs)
+ */
+const isExpoGo = Constants.appOwnership === "expo";
+
+/**
+ * Module messaging chargé dynamiquement
+ * Null si dans Expo Go ou si non disponible
+ */
+let messagingModule: any = null;
+
+// Ne charger messaging que si on n'est PAS dans Expo Go
+if (!isExpoGo) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    messagingModule = require("@react-native-firebase/messaging").default;
+    console.log("[Firebase] Messaging module loaded successfully");
+  } catch (error) {
+    console.warn("[Firebase] Messaging module not available:", error);
+  }
+} else {
+  console.log("[Firebase] Expo Go detected - Messaging disabled");
+}
 
 // ============================================================
 // EXPORTS DES INSTANCES
 // ============================================================
 
-export { auth, firestore, storage, messaging };
+export { auth, firestore, storage };
+
+// Export messaging uniquement s'il est disponible
+export const messaging = messagingModule;
 
 // ============================================================
 // TYPES RÉ-EXPORTÉS
 // ============================================================
 
-export type { FirebaseAuthTypes, FirebaseFirestoreTypes, FirebaseStorageTypes, FirebaseMessagingTypes };
+export type { FirebaseAuthTypes, FirebaseFirestoreTypes };
+
+// Type conditionnel pour messaging
+export type FirebaseMessagingTypes = any;
 
 // ============================================================
 // HELPERS FIRESTORE
@@ -121,30 +157,52 @@ export const getSessionMediaPath = (
 };
 
 // ============================================================
-// HELPERS MESSAGING (FCM)
+// HELPERS MESSAGING (FCM) - CONDITIONNELS
 // ============================================================
 
 /**
+ * Vérifie si les notifications sont disponibles
+ */
+export const isMessagingAvailable = (): boolean => {
+  return messagingModule !== null;
+};
+
+/**
  * Demande la permission pour les notifications
- * @returns true si autorisé
+ * @returns true si autorisé, false si non disponible ou refusé
  */
 export const requestNotificationPermission = async (): Promise<boolean> => {
-  const authStatus = await messaging().requestPermission();
-  const enabled =
-    authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-    authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-  return enabled;
+  if (!messagingModule) {
+    console.log("[Firebase] requestNotificationPermission - messaging not available");
+    return false;
+  }
+  
+  try {
+    const authStatus = await messagingModule().requestPermission();
+    const enabled =
+      authStatus === messagingModule.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messagingModule.AuthorizationStatus.PROVISIONAL;
+    return enabled;
+  } catch (error) {
+    console.error("[Firebase] requestNotificationPermission error:", error);
+    return false;
+  }
 };
 
 /**
  * Récupère le token FCM de l'appareil
  */
 export const getFCMToken = async (): Promise<string | null> => {
+  if (!messagingModule) {
+    console.log("[Firebase] getFCMToken - messaging not available");
+    return null;
+  }
+  
   try {
-    const token = await messaging().getToken();
+    const token = await messagingModule().getToken();
     return token;
   } catch (error) {
-    console.error("Erreur récupération FCM token:", error);
+    console.error("[Firebase] getFCMToken error:", error);
     return null;
   }
 };
@@ -153,14 +211,32 @@ export const getFCMToken = async (): Promise<string | null> => {
  * S'abonne à un topic FCM
  */
 export const subscribeToTopic = async (topic: string): Promise<void> => {
-  await messaging().subscribeToTopic(topic);
+  if (!messagingModule) {
+    console.log("[Firebase] subscribeToTopic - messaging not available");
+    return;
+  }
+  
+  try {
+    await messagingModule().subscribeToTopic(topic);
+  } catch (error) {
+    console.error("[Firebase] subscribeToTopic error:", error);
+  }
 };
 
 /**
  * Se désabonne d'un topic FCM
  */
 export const unsubscribeFromTopic = async (topic: string): Promise<void> => {
-  await messaging().unsubscribeFromTopic(topic);
+  if (!messagingModule) {
+    console.log("[Firebase] unsubscribeFromTopic - messaging not available");
+    return;
+  }
+  
+  try {
+    await messagingModule().unsubscribeFromTopic(topic);
+  } catch (error) {
+    console.error("[Firebase] unsubscribeFromTopic error:", error);
+  }
 };
 
 // ============================================================
