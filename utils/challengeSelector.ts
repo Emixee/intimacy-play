@@ -334,16 +334,16 @@ export function selectChallenges(config: SelectionConfig): SelectionResult {
 
     usedIds.add(challenge.id);
 
-    // Convertir en SessionChallenge
+    // Convertir en SessionChallenge (compatible avec le type existant)
     const sessionChallenge: SessionChallenge = {
       text: challenge.text,
       level: challenge.level,
+      type: challenge.type,
       forGender: gender,
       forPlayer,
-      type: challenge.type,
-      theme: challenge.theme,
-      status: "pending",
-      skipped: false,
+      completed: false,
+      completedBy: null,
+      completedAt: null,
     };
 
     selectedChallenges.push(sessionChallenge);
@@ -413,13 +413,11 @@ function calculateStats(challenges: SessionChallenge[]): SelectionResult["stats"
     texte: 0,
   };
   const byPlayer: Record<PlayerRole, number> = { creator: 0, partner: 0 };
-  let withToys = 0;
 
   for (const challenge of challenges) {
     byLevel[challenge.level]++;
     byType[challenge.type]++;
     byPlayer[challenge.forPlayer]++;
-    // Note: on n'a pas hasToy dans SessionChallenge, on pourrait l'ajouter
   }
 
   return {
@@ -427,7 +425,7 @@ function calculateStats(challenges: SessionChallenge[]): SelectionResult["stats"
     byLevel,
     byType,
     byPlayer,
-    withToys,
+    withToys: 0, // Non trackable depuis SessionChallenge
   };
 }
 
@@ -476,12 +474,12 @@ export function getReplacementChallenge(
   return {
     text: selected.text,
     level: selected.level,
+    type: selected.type,
     forGender,
     forPlayer,
-    type: selected.type,
-    theme: selected.theme,
-    status: "pending",
-    skipped: false,
+    completed: false,
+    completedBy: null,
+    completedAt: null,
   };
 }
 
@@ -493,7 +491,7 @@ export function countRemainingChallenges(
   playerRole: PlayerRole
 ): number {
   return challenges.filter(
-    (c) => c.forPlayer === playerRole && c.status === "pending"
+    (c) => c.forPlayer === playerRole && !c.completed
   ).length;
 }
 
@@ -512,7 +510,7 @@ export function getCompletionByLevel(
 
   for (const challenge of challenges) {
     result[challenge.level].total++;
-    if (challenge.status === "completed") {
+    if (challenge.completed) {
       result[challenge.level].completed++;
     }
   }
@@ -529,7 +527,7 @@ export function isLevelCompleted(
 ): boolean {
   const levelChallenges = challenges.filter((c) => c.level === level);
   if (levelChallenges.length === 0) return false;
-  return levelChallenges.every((c) => c.status === "completed");
+  return levelChallenges.every((c) => c.completed);
 }
 
 /**
@@ -540,7 +538,7 @@ export function getNextPendingChallenge(
   startIndex: number = 0
 ): { challenge: SessionChallenge; index: number } | null {
   for (let i = startIndex; i < challenges.length; i++) {
-    if (challenges[i].status === "pending") {
+    if (!challenges[i].completed) {
       return { challenge: challenges[i], index: i };
     }
   }
@@ -555,7 +553,7 @@ export function calculateProgress(challenges: SessionChallenge[]): {
   total: number;
   percentage: number;
 } {
-  const completed = challenges.filter((c) => c.status === "completed").length;
+  const completed = challenges.filter((c) => c.completed).length;
   const total = challenges.length;
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
 
