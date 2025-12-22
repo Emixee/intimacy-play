@@ -592,6 +592,97 @@ export function getAlternatives(
 }
 
 // ============================================================
+// FONCTION POUR RÉGÉNÉRER LES DÉFIS D'UN JOUEUR (PROMPT 1.3-v3)
+// ============================================================
+
+/**
+ * Sélectionne les défis pour UN joueur uniquement
+ * Utilisé pour régénérer les défis du partenaire quand il rejoint
+ * 
+ * @param gender Genre du joueur
+ * @param count Nombre de défis à générer
+ * @param startIntensity Niveau d'intensité de départ
+ * @param isPremium Si le joueur est premium
+ * @param preferences Préférences du joueur
+ * @param forPlayer Rôle du joueur (creator/partner)
+ * @param excludeTexts Textes de défis à exclure (déjà utilisés)
+ */
+export function selectChallengesForPlayer(
+  gender: Gender,
+  count: number,
+  startIntensity: IntensityLevel,
+  isPremium: boolean,
+  preferences: PlayerPreferences,
+  forPlayer: PlayerRole,
+  excludeTexts: string[] = []
+): SessionChallenge[] {
+  const maxLevel = getMaxLevel(isPremium);
+
+  // Charger et filtrer les défis selon les préférences
+  const allChallenges = getAllChallenges();
+  const filteredChallenges = applyFiltersForPlayer(
+    allChallenges.filter((c) => c.gender === gender),
+    preferences,
+    maxLevel
+  );
+
+  // Exclure les défis déjà utilisés
+  const excludeSet = new Set(excludeTexts);
+  const availableChallenges = filteredChallenges.filter(
+    (c) => !excludeSet.has(c.text)
+  );
+
+  // Mélanger
+  const shuffled = shuffleArray(availableChallenges);
+
+  // Organiser par niveau
+  const byLevel: Record<IntensityLevel, ExtendedChallengeTemplate[]> = {
+    1: shuffled.filter((c) => c.level === 1),
+    2: shuffled.filter((c) => c.level === 2),
+    3: shuffled.filter((c) => c.level === 3),
+    4: shuffled.filter((c) => c.level === 4),
+  };
+
+  // Sélectionner selon la progression
+  const selectedChallenges: SessionChallenge[] = [];
+  const usedIds = new Set<string>();
+
+  for (let i = 0; i < count; i++) {
+    const progress = i / count;
+    let targetLevel: IntensityLevel;
+
+    if (progress < 0.4) {
+      targetLevel = startIntensity;
+    } else if (progress < 0.7) {
+      targetLevel = Math.min(startIntensity + 1, maxLevel) as IntensityLevel;
+    } else if (progress < 0.9) {
+      targetLevel = Math.min(startIntensity + 2, maxLevel) as IntensityLevel;
+    } else {
+      targetLevel = maxLevel;
+    }
+
+    const challenge = findAvailableChallenge(byLevel, targetLevel, usedIds, maxLevel);
+
+    if (challenge) {
+      usedIds.add(challenge.id);
+
+      selectedChallenges.push({
+        text: challenge.text,
+        level: challenge.level,
+        type: challenge.type,
+        forGender: gender,
+        forPlayer,
+        completed: false,
+        completedBy: null,
+        completedAt: null,
+      });
+    }
+  }
+
+  return selectedChallenges;
+}
+
+// ============================================================
 // FONCTIONS UTILITAIRES POUR LE JEU
 // ============================================================
 
@@ -748,6 +839,7 @@ export function canChangeChallenge(
 
 export default {
   selectChallenges,
+  selectChallengesForPlayer,
   getAlternatives,
   isLevelAccessible,
   getAccessibleLevels,

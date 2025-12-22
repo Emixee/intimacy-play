@@ -1,6 +1,11 @@
 /**
  * Service de gestion des sessions de jeu
  *
+ * PROMPT 1.3-v3 : Préférences séparées par joueur
+ * - Chaque joueur a ses propres thèmes, jouets, préférences média
+ * - Les défis sont filtrés selon les préférences individuelles
+ * - Régénération des défis du partenaire quand il rejoint
+ *
  * Gère toutes les opérations liées aux sessions :
  * - Génération de codes uniques
  * - Création/suppression de sessions
@@ -40,8 +45,11 @@ import {
 } from "../types";
 import {
   getAlternatives,
+  selectChallengesForPlayer,
   SelectionConfig,
   ChallengeAlternatives,
+  PlayerPreferences,
+  DEFAULT_PLAYER_PREFERENCES,
 } from "../utils/challengeSelector";
 // PROMPT 7.3 : Import du service de publicités
 import { adsService } from "./ads.service";
@@ -162,21 +170,13 @@ const getUserRoleInSession = (session: Session | Omit<Session, "id">, odfsdfhdjs
 
 /**
  * Configuration étendue pour la création de session
- * Inclut les options premium
+ * PROMPT 1.3-v3 : Préférences séparées par joueur
  */
 export interface ExtendedCreateSessionData extends CreateSessionData {
-  /** Thèmes sélectionnés (Premium) */
-  selectedThemes?: string[];
-  /** Inclure les défis avec jouets (Premium) */
-  includeToys?: boolean;
-  /** Jouets disponibles (Premium) */
-  availableToys?: string[];
-  /** Préférences média */
-  mediaPreferences?: {
-    photo: boolean;
-    audio: boolean;
-    video: boolean;
-  };
+  /** Préférences du créateur */
+  creatorPreferences?: PlayerPreferences;
+  /** Préférences du partenaire */
+  partnerPreferences?: PlayerPreferences;
 }
 
 // ============================================================
@@ -239,7 +239,10 @@ export const sessionService = {
     }
 
     // Vérification jouets (premium uniquement)
-    if (config.includeToys && !isPremium) {
+    const creatorPrefs = config.creatorPreferences || DEFAULT_PLAYER_PREFERENCES;
+    const partnerPrefs = config.partnerPreferences || DEFAULT_PLAYER_PREFERENCES;
+    
+    if ((creatorPrefs.includeToys || partnerPrefs.includeToys) && !isPremium) {
       return getSessionErrorMessage("TOYS_PREMIUM_ONLY");
     }
 
@@ -412,6 +415,106 @@ export const sessionService = {
       };
     } catch (error: any) {
       console.error("[SessionService] Join session error:", error);
+      return {
+        success: false,
+        error: getSessionErrorMessage("UNKNOWN_ERROR"),
+      };
+    }
+  },
+
+  // ============================================================
+  // REGENERATE PARTNER CHALLENGES (Prompt 1.3-v3)
+  // ============================================================
+
+  /**
+   * Régénère les défis du partenaire selon SES préférences
+   * Appelé après que le partenaire a rejoint la session
+   * 
+   * PROMPT 1.3-v3 : Les défis du partenaire sont adaptés à ses préférences
+   */
+  regeneratePartnerChallenges: async (
+    sessionCode: string,
+    partnerId: string,
+    partnerGender: Gender,
+    partnerPreferences: PlayerPreferences,
+    isPremium: boolean
+  ): Promise<ApiResponse> => {
+    const normalizedCode = normalizeCode(sessionCode);
+
+    try {
+      const sessionRef = sessionsCollection().doc(normalizedCode);
+      const sessionDoc = await sessionRef.get();
+
+      if (!sessionDoc.exists()) {
+        return {
+          success: false,
+          error: getSessionErrorMessage("SESSION_NOT_FOUND"),
+        };
+      }
+
+      const session = sessionDoc.data() as Omit<Session, "id">;
+
+      // Vérifier que c'est bien le partenaire
+      if (session.partnerId !== partnerId) {
+        return {
+          success: false,
+          error: getSessionErrorMessage("NOT_SESSION_MEMBER"),
+        };
+      }
+
+      // Garder les défis du créateur, régénérer ceux du partenaire
+      const creatorChallenges = session.challenges.filter(
+        (c) => c.forPlayer === "creator"
+      );
+
+      // Calculer le nombre de défis du partenaire
+      const partnerChallengeCount = session.challenges.filter(
+        (c) => c.forPlayer === "partner"
+      ).length;
+
+      // Générer les nouveaux défis du partenaire
+      const newPartnerChallenges = selectChallengesForPlayer(
+        partnerGender,
+        partnerChallengeCount,
+        session.startIntensity,
+        isPremium,
+        partnerPreferences,
+        "partner",
+        creatorChallenges.map((c) => c.text) // Exclure les textes déjà utilisés
+      );
+
+      // Reconstruire la liste complète en alternant créateur/partenaire
+      const updatedChallenges: SessionChallenge[] = [];
+      let creatorIndex = 0;
+      let partnerIndex = 0;
+
+      for (let i = 0; i < session.challenges.length; i++) {
+        if (i % 2 === 0) {
+          // Position paire = créateur
+          if (creatorIndex < creatorChallenges.length) {
+            updatedChallenges.push(creatorChallenges[creatorIndex]);
+            creatorIndex++;
+          }
+        } else {
+          // Position impaire = partenaire
+          if (partnerIndex < newPartnerChallenges.length) {
+            updatedChallenges.push(newPartnerChallenges[partnerIndex]);
+            partnerIndex++;
+          }
+        }
+      }
+
+      // Mettre à jour la session
+      await sessionRef.update({
+        challenges: updatedChallenges,
+      });
+
+      console.log(`[SessionService] Partner challenges regenerated for session ${sessionCode}`);
+      console.log(`[SessionService] Partner themes: ${partnerPreferences.selectedThemes.join(", ")}`);
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("[SessionService] Regenerate partner challenges error:", error);
       return {
         success: false,
         error: getSessionErrorMessage("UNKNOWN_ERROR"),
@@ -703,16 +806,19 @@ export const sessionService = {
   },
 
   // ============================================================
-  // GET ALTERNATIVES (Prompt 4.2)
+  // GET ALTERNATIVES (Prompt 4.2 + PROMPT 1.3-v3)
   // ============================================================
 
   /**
    * Récupère 2 alternatives pour changer un défi
+   * PROMPT 1.3-v3 : Utilise les préférences individuelles des joueurs
    */
   getChallengeAlternatives: (
     session: Session,
     challengeIndex: number,
-    isPremium: boolean
+    isPremium: boolean,
+    creatorPreferences?: PlayerPreferences,
+    partnerPreferences?: PlayerPreferences
   ): ChallengeAlternatives => {
     const config: SelectionConfig = {
       creatorGender: session.creatorGender,
@@ -720,14 +826,8 @@ export const sessionService = {
       count: session.challengeCount,
       startIntensity: session.startIntensity,
       isPremium,
-      selectedThemes: [],
-      includeToys: false,
-      availableToys: [],
-      mediaPreferences: {
-        photo: true,
-        audio: true,
-        video: true,
-      },
+      creatorPreferences: creatorPreferences || DEFAULT_PLAYER_PREFERENCES,
+      partnerPreferences: partnerPreferences || DEFAULT_PLAYER_PREFERENCES,
     };
 
     return getAlternatives(session.challenges, challengeIndex, config);

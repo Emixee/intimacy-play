@@ -1,6 +1,10 @@
 /**
  * Écran pour rejoindre une session
  *
+ * PROMPT 1.3-v3 : Régénération des défis du partenaire
+ * - Quand le partenaire rejoint, ses défis sont régénérés selon SES préférences
+ * - Ses préférences sont récupérées depuis son profil (user.preferences)
+ *
  * Permet au partenaire de saisir le code à 6 caractères
  * et de rejoindre la session de jeu.
  */
@@ -22,6 +26,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { Button } from "../../components/ui";
 import { useAuth } from "../../hooks/useAuth";
 import { sessionService } from "../../services/session.service";
+import { 
+  PlayerPreferences, 
+  DEFAULT_PLAYER_PREFERENCES 
+} from "../../utils/challengeSelector";
 
 // ============================================================
 // CONSTANTES
@@ -135,7 +143,7 @@ export default function JoinSessionScreen() {
   // HOOKS
   // ----------------------------------------------------------
 
-  const { userData } = useAuth();
+  const { userData, isPremium } = useAuth();
 
   // ----------------------------------------------------------
   // STATE
@@ -150,6 +158,27 @@ export default function JoinSessionScreen() {
   // ----------------------------------------------------------
 
   const isCodeComplete = code.length === CODE_LENGTH;
+
+  /**
+   * Préférences du partenaire (celui qui rejoint)
+   * PROMPT 1.3-v3 : Utilise les préférences réelles du partenaire
+   */
+  const partnerPreferences: PlayerPreferences = React.useMemo(() => {
+    if (!userData?.preferences) {
+      return DEFAULT_PLAYER_PREFERENCES;
+    }
+
+    return {
+      selectedThemes: userData.preferences.themes || ["classique"],
+      includeToys: (userData.preferences.toys?.length || 0) > 0 && isPremium,
+      availableToys: userData.preferences.toys || [],
+      mediaPreferences: userData.preferences.mediaPreferences || {
+        photo: true,
+        audio: true,
+        video: true,
+      },
+    };
+  }, [userData?.preferences, isPremium]);
 
   // ----------------------------------------------------------
   // HANDLERS
@@ -173,6 +202,8 @@ export default function JoinSessionScreen() {
 
   /**
    * Rejoindre la session
+   * 
+   * PROMPT 1.3-v3 : Après avoir rejoint, régénère les défis du partenaire
    */
   const handleJoinSession = useCallback(async () => {
     if (!isCodeComplete || !userData) return;
@@ -194,7 +225,26 @@ export default function JoinSessionScreen() {
 
       if (result.success && result.data) {
         console.log("[JoinSession] Successfully joined session");
+        console.log("[JoinSession] Partner themes:", partnerPreferences.selectedThemes);
         
+        // ============================================================
+        // PROMPT 1.3-v3 : Régénérer les défis du partenaire
+        // ============================================================
+        const regenerateResult = await sessionService.regeneratePartnerChallenges(
+          result.data.id,
+          userData.id,
+          userData.gender,
+          partnerPreferences,
+          isPremium
+        );
+
+        if (regenerateResult.success) {
+          console.log("[JoinSession] Partner challenges regenerated successfully");
+        } else {
+          console.warn("[JoinSession] Failed to regenerate partner challenges:", regenerateResult.error);
+          // On continue quand même, les défis par défaut seront utilisés
+        }
+
         // Naviguer vers l'écran de jeu
         router.replace({
           pathname: "/game",
@@ -222,7 +272,7 @@ export default function JoinSessionScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [code, isCodeComplete, userData]);
+  }, [code, isCodeComplete, userData, partnerPreferences, isPremium]);
 
   // ----------------------------------------------------------
   // RENDER
@@ -276,6 +326,16 @@ export default function JoinSessionScreen() {
                 <Text className="text-gray-400 ml-1 text-sm">Effacer</Text>
               </Pressable>
             )}
+          </View>
+
+          {/* Info sur les préférences */}
+          <View className="bg-pink-50 border border-pink-200 rounded-xl p-4 mb-6">
+            <View className="flex-row items-center">
+              <Ionicons name="heart" size={20} color="#EC4899" />
+              <Text className="text-pink-700 ml-2 flex-1 text-sm">
+                Vos défis seront adaptés à vos thèmes : {partnerPreferences.selectedThemes.join(", ")}
+              </Text>
+            </View>
           </View>
 
           {/* Bouton Rejoindre */}
