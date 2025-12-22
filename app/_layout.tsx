@@ -18,16 +18,31 @@ import { LoadingScreen } from "../components/ui/LoadingSpinner";
 import "../global.css";
 
 // Empêcher le splash screen de se cacher automatiquement
-SplashScreen.preventAutoHideAsync();
+// Wrapper dans un try-catch pour éviter l'erreur keep-awake sur émulateur
+try {
+  SplashScreen.preventAutoHideAsync();
+} catch (e) {
+  // Ignorer silencieusement l'erreur keep-awake
+  console.warn("[SplashScreen] preventAutoHideAsync error ignored:", e);
+}
 
 export default function RootLayout() {
   const { isInitialized, isLoading } = useAuth();
 
   // Cacher le splash screen quand l'auth est initialisée
   useEffect(() => {
-    if (isInitialized) {
-      SplashScreen.hideAsync();
-    }
+    const hideSplash = async () => {
+      if (isInitialized) {
+        try {
+          await SplashScreen.hideAsync();
+        } catch (e) {
+          // Ignorer silencieusement l'erreur keep-awake
+          console.warn("[SplashScreen] hideAsync error ignored:", e);
+        }
+      }
+    };
+    
+    hideSplash();
   }, [isInitialized]);
 
   // Afficher le loading pendant l'initialisation
