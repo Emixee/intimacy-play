@@ -5,24 +5,34 @@
  * - Initialise les notifications push
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Stack, router } from "expo-router";
 import { useAuthStore } from "../../stores/authStore";
 import { useNotifications } from "../../hooks/useNotifications";
 
 export default function MainLayout() {
-  const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  // Sélectionner uniquement les valeurs primitives nécessaires
+  const firebaseUserId = useAuthStore((state) => state.firebaseUser?.uid ?? null);
   const isInitialized = useAuthStore((state) => state.isInitialized);
+  
+  // Ref pour éviter les redirections multiples
+  const hasRedirectedRef = useRef(false);
 
   // Initialiser les notifications push
   useNotifications();
 
   useEffect(() => {
-    // Rediriger si non connecté
-    if (isInitialized && !firebaseUser) {
+    // Rediriger si non connecté (une seule fois)
+    if (isInitialized && !firebaseUserId && !hasRedirectedRef.current) {
+      hasRedirectedRef.current = true;
       router.replace("/(auth)/login");
     }
-  }, [firebaseUser, isInitialized]);
+    
+    // Reset le flag si l'utilisateur se connecte
+    if (firebaseUserId) {
+      hasRedirectedRef.current = false;
+    }
+  }, [firebaseUserId, isInitialized]);
 
   return (
     <Stack

@@ -1,7 +1,7 @@
 /**
  * Hook pour gérer les notifications
  * 
- * CORRECTIF : Gestion gracieuse du cas Expo Go (pas de crash)
+ * CORRECTIF : Évite les boucles infinies avec des sélecteurs stables
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { notificationService } from '../services/notification.service';
 import { userService } from '../services/user.service';
-import { useAuth } from './useAuth';
+import { useAuthStore } from '../stores/authStore';
 
 interface UseNotificationsReturn {
   /** Les notifications sont-elles supportées sur cet appareil */
@@ -35,15 +35,17 @@ const checkIsExpoGo = (): boolean => {
   return Constants.appOwnership === 'expo';
 };
 
+// Vérifier Expo Go une seule fois au chargement du module
+const IS_EXPO_GO = checkIsExpoGo();
+
 export const useNotifications = (): UseNotificationsReturn => {
-  const { firebaseUser, userData } = useAuth();
-  
-  // Vérifier Expo Go au montage
-  const [isExpoGo] = useState(() => checkIsExpoGo());
+  // Sélectionner UNIQUEMENT les valeurs primitives nécessaires du store
+  const firebaseUserId = useAuthStore((state) => state.firebaseUser?.uid ?? null);
+  const notificationsEnabled = useAuthStore((state) => state.userData?.notificationsEnabled ?? true);
   
   // Si Expo Go, les notifications ne sont pas supportées
   const [isSupported] = useState(() => {
-    if (isExpoGo) {
+    if (IS_EXPO_GO) {
       console.log('[useNotifications] Expo Go detected - notifications disabled');
       return false;
     }
@@ -59,18 +61,19 @@ export const useNotifications = (): UseNotificationsReturn => {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const initializedRef = useRef(false);
+  const initializingRef = useRef(false);
 
   /**
    * Initialise les notifications
    */
   const initialize = useCallback(async () => {
-    // Éviter les appels multiples
-    if (initializedRef.current) {
+    // Éviter les appels multiples ou simultanés
+    if (initializedRef.current || initializingRef.current) {
       return;
     }
     
     // Ne pas initialiser dans Expo Go
-    if (isExpoGo) {
+    if (IS_EXPO_GO) {
       console.log('[useNotifications] Skipping init - Expo Go');
       setError('Notifications désactivées dans Expo Go');
       return;
@@ -83,12 +86,12 @@ export const useNotifications = (): UseNotificationsReturn => {
     }
     
     // Ne pas initialiser si pas d'utilisateur
-    if (!firebaseUser) {
+    if (!firebaseUserId) {
       console.log('[useNotifications] Skipping init - no user');
       return;
     }
 
-    initializedRef.current = true;
+    initializingRef.current = true;
     setIsLoading(true);
     setError(null);
 
@@ -98,9 +101,10 @@ export const useNotifications = (): UseNotificationsReturn => {
       if (result.success && result.token) {
         setToken(result.token);
         setIsEnabled(true);
+        initializedRef.current = true;
 
         // Sauvegarder le token dans Firestore
-        await userService.updateFcmToken(firebaseUser.uid, result.token);
+        await userService.updateFcmToken(firebaseUserId, result.token);
         console.log('[useNotifications] Token saved to Firestore');
       } else {
         setError(result.error || null);
@@ -112,30 +116,32 @@ export const useNotifications = (): UseNotificationsReturn => {
       setIsEnabled(false);
     } finally {
       setIsLoading(false);
+      initializingRef.current = false;
     }
-  }, [isSupported, isExpoGo, firebaseUser]);
+  }, [isSupported, firebaseUserId]);
 
-  // Auto-init quand l'utilisateur est connecté et que les notifs sont activées
+  // Auto-init quand l'utilisateur est connecté
   useEffect(() => {
     // Ne pas auto-init dans Expo Go
-    if (isExpoGo) {
+    if (IS_EXPO_GO) {
       return;
     }
     
-    if (isSupported && firebaseUser && userData?.notificationsEnabled !== false) {
+    if (isSupported && firebaseUserId && notificationsEnabled) {
       initialize();
     }
-  }, [isSupported, isExpoGo, firebaseUser, userData?.notificationsEnabled, initialize]);
+  }, [isSupported, firebaseUserId, notificationsEnabled, initialize]);
 
   // Reset si l'utilisateur se déconnecte
   useEffect(() => {
-    if (!firebaseUser) {
+    if (!firebaseUserId) {
       initializedRef.current = false;
+      initializingRef.current = false;
       setToken(null);
       setIsEnabled(false);
       setError(null);
     }
-  }, [firebaseUser]);
+  }, [firebaseUserId]);
 
   return {
     isSupported,
@@ -143,7 +149,7 @@ export const useNotifications = (): UseNotificationsReturn => {
     isLoading,
     token,
     error,
-    isExpoGo,
+    isExpoGo: IS_EXPO_GO,
     initialize,
   };
 };

@@ -4,20 +4,30 @@
  * Redirige vers (main) si l'utilisateur est déjà connecté
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Stack, router } from "expo-router";
 import { useAuthStore } from "../../stores/authStore";
 
 export default function AuthLayout() {
-  const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  // Sélectionner uniquement les valeurs primitives
+  const firebaseUserId = useAuthStore((state) => state.firebaseUser?.uid ?? null);
   const isInitialized = useAuthStore((state) => state.isInitialized);
+  
+  // Ref pour éviter les redirections multiples
+  const hasRedirectedRef = useRef(false);
 
   useEffect(() => {
-    // Rediriger si connecté
-    if (isInitialized && firebaseUser) {
+    // Rediriger si connecté (une seule fois)
+    if (isInitialized && firebaseUserId && !hasRedirectedRef.current) {
+      hasRedirectedRef.current = true;
       router.replace("/(main)");
     }
-  }, [firebaseUser, isInitialized]);
+    
+    // Reset le flag si l'utilisateur se déconnecte
+    if (!firebaseUserId) {
+      hasRedirectedRef.current = false;
+    }
+  }, [firebaseUserId, isInitialized]);
 
   return (
     <Stack
