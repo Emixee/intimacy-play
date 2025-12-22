@@ -8,7 +8,6 @@
  */
 
 import { create } from "zustand";
-import { subscribeWithSelector } from "zustand/middleware";
 import { FirebaseAuthTypes } from "@react-native-firebase/auth";
 import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
@@ -31,13 +30,33 @@ interface AuthState {
   setLoading: (loading: boolean) => void;
   setInitialized: (initialized: boolean) => void;
   clearAuth: () => void;
-  
-  // Initialization
-  initializeAuth: () => () => void;
 }
 
 // ============================================================
-// SINGLETON STATE
+// CRÉATION DU STORE
+// ============================================================
+
+export const useAuthStore = create<AuthState>()((set) => ({
+  // Initial state
+  firebaseUser: null,
+  userData: null,
+  isLoading: true,
+  isInitialized: false,
+  
+  // Actions
+  setFirebaseUser: (user) => set({ firebaseUser: user }),
+  setUserData: (data) => set({ userData: data }),
+  setLoading: (loading) => set({ isLoading: loading }),
+  setInitialized: (initialized) => set({ isInitialized: initialized }),
+  clearAuth: () => set({
+    firebaseUser: null,
+    userData: null,
+    isLoading: false,
+  }),
+}));
+
+// ============================================================
+// SINGLETON INITIALIZATION (appelé une seule fois)
 // ============================================================
 
 interface ListenerState {
@@ -52,118 +71,97 @@ const listenerState: ListenerState = {
   userDataUnsubscribe: null,
 };
 
-// ============================================================
-// CRÉATION DU STORE
-// ============================================================
-
-export const useAuthStore = create<AuthState>()(
-  subscribeWithSelector((set, get) => ({
-    // Initial state
-    firebaseUser: null,
-    userData: null,
-    isLoading: true,
-    isInitialized: false,
+/**
+ * Initialise les listeners Firebase Auth
+ * À appeler UNE SEULE FOIS dans app/_layout.tsx
+ */
+export const initializeAuthListeners = (): (() => void) => {
+  // Éviter les initialisations multiples
+  if (listenerState.isInitialized) {
+    console.log("[AuthStore] Already initialized, skipping");
+    return () => {};
+  }
+  
+  listenerState.isInitialized = true;
+  console.log("[AuthStore] Initializing auth listener");
+  
+  const { setFirebaseUser, setUserData, setLoading, setInitialized } = useAuthStore.getState();
+  
+  // Listener principal d'authentification
+  listenerState.authUnsubscribe = auth().onAuthStateChanged(async (user) => {
+    console.log("[AuthStore] Auth state changed:", user?.uid ?? "null");
     
-    // Actions
-    setFirebaseUser: (user) => set({ firebaseUser: user }),
-    setUserData: (data) => set({ userData: data }),
-    setLoading: (loading) => set({ isLoading: loading }),
-    setInitialized: (initialized) => set({ isInitialized: initialized }),
-    clearAuth: () => set({
-      firebaseUser: null,
-      userData: null,
-      isLoading: false,
-    }),
+    // Cleanup previous user data listener
+    if (listenerState.userDataUnsubscribe) {
+      listenerState.userDataUnsubscribe();
+      listenerState.userDataUnsubscribe = null;
+    }
     
-    // Initialize auth listener (singleton)
-    initializeAuth: () => {
-      // Éviter les initialisations multiples
-      if (listenerState.isInitialized) {
-        console.log("[AuthStore] Already initialized, skipping");
-        return () => {};
-      }
+    if (user) {
+      // Utilisateur connecté
+      useAuthStore.setState({ firebaseUser: user });
       
-      listenerState.isInitialized = true;
-      console.log("[AuthStore] Initializing auth listener");
-      
-      // Listener principal d'authentification
-      listenerState.authUnsubscribe = auth().onAuthStateChanged(async (user) => {
-        console.log("[AuthStore] Auth state changed:", user?.uid ?? "null");
-        
-        // Cleanup previous user data listener
-        if (listenerState.userDataUnsubscribe) {
-          listenerState.userDataUnsubscribe();
-          listenerState.userDataUnsubscribe = null;
-        }
-        
-        if (user) {
-          // Utilisateur connecté
-          set({ firebaseUser: user });
-          
-          // Écouter les changements des données utilisateur
-          listenerState.userDataUnsubscribe = firestore()
-            .collection("users")
-            .doc(user.uid)
-            .onSnapshot(
-              (snapshot) => {
-                // exists() est une méthode dans @react-native-firebase
-                if (snapshot.exists()) {
-                  const data = { id: snapshot.id, ...snapshot.data() } as User;
-                  console.log("[AuthStore] User data updated:", data.displayName ?? "no name");
-                  set({ 
-                    userData: data, 
-                    isLoading: false, 
-                    isInitialized: true 
-                  });
-                } else {
-                  console.log("[AuthStore] User document not found");
-                  set({ 
-                    userData: null, 
-                    isLoading: false, 
-                    isInitialized: true 
-                  });
-                }
-              },
-              (error) => {
-                console.error("[AuthStore] User data listener error:", error);
-                set({ 
-                  userData: null, 
-                  isLoading: false, 
-                  isInitialized: true 
-                });
-              }
-            );
-        } else {
-          // Utilisateur déconnecté
-          console.log("[AuthStore] User logged out");
-          set({
-            firebaseUser: null,
-            userData: null,
-            isLoading: false,
-            isInitialized: true,
-          });
-        }
+      // Écouter les changements des données utilisateur
+      listenerState.userDataUnsubscribe = firestore()
+        .collection("users")
+        .doc(user.uid)
+        .onSnapshot(
+          (snapshot) => {
+            if (snapshot.exists()) {
+              const data = { id: snapshot.id, ...snapshot.data() } as User;
+              console.log("[AuthStore] User data updated:", data.displayName ?? "no name");
+              useAuthStore.setState({ 
+                userData: data, 
+                isLoading: false, 
+                isInitialized: true 
+              });
+            } else {
+              console.log("[AuthStore] User document not found");
+              useAuthStore.setState({ 
+                userData: null, 
+                isLoading: false, 
+                isInitialized: true 
+              });
+            }
+          },
+          (error) => {
+            console.error("[AuthStore] User data listener error:", error);
+            useAuthStore.setState({ 
+              userData: null, 
+              isLoading: false, 
+              isInitialized: true 
+            });
+          }
+        );
+    } else {
+      // Utilisateur déconnecté
+      console.log("[AuthStore] User logged out");
+      useAuthStore.setState({
+        firebaseUser: null,
+        userData: null,
+        isLoading: false,
+        isInitialized: true,
       });
-      
-      // Retourne la fonction de cleanup
-      return () => {
-        console.log("[AuthStore] Cleaning up auth listeners");
-        
-        if (listenerState.authUnsubscribe) {
-          listenerState.authUnsubscribe();
-          listenerState.authUnsubscribe = null;
-        }
-        
-        if (listenerState.userDataUnsubscribe) {
-          listenerState.userDataUnsubscribe();
-          listenerState.userDataUnsubscribe = null;
-        }
-        
-        listenerState.isInitialized = false;
-      };
-    },
-  }))
-);
+    }
+  });
+  
+  // Retourne la fonction de cleanup
+  return () => {
+    console.log("[AuthStore] Cleaning up auth listeners");
+    
+    if (listenerState.authUnsubscribe) {
+      listenerState.authUnsubscribe();
+      listenerState.authUnsubscribe = null;
+    }
+    
+    if (listenerState.userDataUnsubscribe) {
+      listenerState.userDataUnsubscribe();
+      listenerState.userDataUnsubscribe = null;
+    }
+    
+    listenerState.isInitialized = false;
+  };
+};
 
 // ============================================================
 // SELECTORS (pour éviter les re-renders inutiles)

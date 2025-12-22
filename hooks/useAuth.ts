@@ -2,13 +2,13 @@
  * Hook d'authentification
  *
  * Version simplifiée qui utilise le store Zustand
- * L'initialisation est gérée par le store (singleton pattern)
+ * L'initialisation est gérée dans app/_layout.tsx via initializeAuthListeners()
  *
  * Usage:
  * const { user, userData, isAuthenticated, isLoading, login, register, logout } = useAuth();
  */
 
-import { useEffect, useCallback, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { FirebaseAuthTypes } from "@react-native-firebase/auth";
 import { useAuthStore } from "../stores/authStore";
 import { authService } from "../services/auth.service";
@@ -54,16 +54,6 @@ export const useAuth = (): UseAuthReturn => {
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const setLoading = useAuthStore((state) => state.setLoading);
   const setUserData = useAuthStore((state) => state.setUserData);
-  const initializeAuth = useAuthStore((state) => state.initializeAuth);
-
-  // ----------------------------------------------------------
-  // INITIALISATION (une seule fois globalement)
-  // ----------------------------------------------------------
-
-  useEffect(() => {
-    const cleanup = initializeAuth();
-    return cleanup;
-  }, [initializeAuth]);
 
   // ----------------------------------------------------------
   // COMPUTED VALUES (mémorisées)
