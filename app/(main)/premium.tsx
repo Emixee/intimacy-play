@@ -48,7 +48,7 @@ export default function PremiumScreen() {
         <View className="bg-white rounded-2xl p-6 mt-8 w-full shadow-sm">
           <View className="flex-row items-center justify-between mb-4">
             <Text className="text-lg font-semibold text-gray-800">Mensuel</Text>
-            <Text className="text-xl font-bold text-pink-500">4,99€/mois</Text>
+            <Text className="text-xl font-bold text-pink-500">6,99€/mois</Text>
           </View>
           
           <View className="flex-row items-center justify-between">
