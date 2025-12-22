@@ -1,8 +1,10 @@
 /**
  * Types TypeScript pour Intimacy Play
  * 
+ * PROMPT 4.3 : Ajout des types pour défis partenaires
+ * 
  * Aligné avec le code existant ET FIRESTORE-SCHEMA.md
- * Compatible avec services/session.service.ts, hooks/useSession.ts, etc.
+ * Compatible avec services/session.service.ts, services/game.service.ts, etc.
  */
 
 import { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
@@ -114,7 +116,7 @@ export type Reaction =
 // ============================================================
 
 /** Nombre de défis (min/max) */
-export const CHALLENGE_COUNT_FREE = { min: 5, max: 10 };
+export const CHALLENGE_COUNT_FREE = { min: 5, max: 15 };
 export const CHALLENGE_COUNT_PREMIUM = { min: 5, max: 50 };
 
 /** Nombre maximum de changements de défi par partie */
@@ -262,12 +264,14 @@ export interface CreateUserData {
 }
 
 // ============================================================
-// SESSION CHALLENGE (simplifié, compatible avec data/challenges.ts)
+// SESSION CHALLENGE
 // ============================================================
 
 /**
  * Défi dans une session
  * Compatible avec la structure utilisée dans data/challenges.ts
+ * 
+ * PROMPT 4.3 : Ajout de createdByPartner pour les défis personnalisés
  */
 export interface SessionChallenge {
   /** Texte du défi */
@@ -296,6 +300,35 @@ export interface SessionChallenge {
   
   /** Date de complétion */
   completedAt: Timestamp | null;
+
+  /**
+   * PROMPT 4.3 : Indique si le défi a été créé par le partenaire (Premium)
+   * Optionnel pour rétrocompatibilité
+   */
+  createdByPartner?: boolean;
+}
+
+// ============================================================
+// PENDING PARTNER CHALLENGE (Premium)
+// ============================================================
+
+/**
+ * PROMPT 4.3 : Défi en attente créé par le partenaire
+ * Stocké dans session.pendingPartnerChallenge
+ */
+export interface PendingPartnerChallenge {
+  /** Texte du défi proposé (optionnel, rempli par le partenaire) */
+  text?: string;
+  /** Niveau d'intensité */
+  level?: IntensityLevel;
+  /** Type de média requis */
+  type?: ChallengeType;
+  /** ID du joueur qui a DEMANDÉ le défi (pas celui qui le crée) */
+  createdBy: string;
+  /** Rôle du joueur qui doit faire ce défi */
+  forPlayer: PlayerRole;
+  /** Date de création de la demande */
+  createdAt: Timestamp;
 }
 
 // ============================================================
@@ -306,7 +339,9 @@ export interface SessionChallenge {
  * Document session Firestore
  * Chemin: /sessions/{sessionCode}
  * 
- * Compatible avec session.service.ts et useSession.ts
+ * Compatible avec session.service.ts et game.service.ts
+ * 
+ * PROMPT 4.3 : Ajout de pendingPartnerChallenge
  */
 export interface Session {
   /** ID Firestore (= sessionCode normalisé) */
@@ -337,6 +372,12 @@ export interface Session {
   partnerChangesUsed: number;
   creatorBonusChanges: number;
   partnerBonusChanges: number;
+
+  /**
+   * PROMPT 4.3 : Défi partenaire en attente (Premium)
+   * null si aucune demande en cours
+   */
+  pendingPartnerChallenge?: PendingPartnerChallenge | null;
 
   // Timestamps
   createdAt: Timestamp;
@@ -451,6 +492,36 @@ export interface ApiResponse<T = void> {
 export interface AlternativeChallenge {
   id: string;
   challenge: SessionChallenge;
+}
+
+/**
+ * PROMPT 4.3 : Résultat du changement de défi
+ */
+export interface ChangeChallengeResult {
+  alternatives: SessionChallenge[];
+  remainingChanges: number;
+  totalChanges: number;
+  isUnlimited: boolean;
+}
+
+/**
+ * PROMPT 4.3 : Résultat de la complétion d'un défi
+ */
+export interface CompleteChallengeResult {
+  nextChallenge: SessionChallenge | null;
+  nextIndex: number;
+  isGameOver: boolean;
+  progress: number;
+}
+
+/**
+ * PROMPT 4.3 : Statistiques de jeu
+ */
+export interface GameStats {
+  completed: number;
+  total: number;
+  progress: number;
+  byLevel: Record<IntensityLevel, { completed: number; total: number }>;
 }
 
 // ============================================================
