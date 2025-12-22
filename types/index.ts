@@ -111,6 +111,21 @@ export type Reaction =
   | (typeof REACTIONS_FREE)[number]
   | (typeof REACTIONS_PREMIUM)[number];
 
+/**
+ * Réaction envoyée dans une session
+ * Stockée dans /sessions/{sessionCode}/reactions/{reactionId}
+ */
+export interface SessionReaction {
+  /** ID de l'utilisateur qui a envoyé la réaction */
+  sentBy: string;
+  /** Emoji de réaction */
+  emoji: Reaction;
+  /** Date d'envoi */
+  sentAt: Timestamp;
+  /** Index du défi concerné (optionnel) */
+  challengeIndex?: number;
+}
+
 // ============================================================
 // CONSTANTES DE LIMITES
 // ============================================================
@@ -133,6 +148,9 @@ export const MEDIA_EXPIRATION_MINUTES = 10;
 
 /** Durée d'expiration du code de session (en heures) */
 export const SESSION_CODE_EXPIRATION_HOURS = 24;
+
+/** Durée d'expiration des réactions (en secondes) */
+export const REACTION_EXPIRATION_SECONDS = 30;
 
 // ============================================================
 // NIVEAUX D'INTENSITÉ
