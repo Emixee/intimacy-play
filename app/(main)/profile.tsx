@@ -6,6 +6,7 @@
  * - Modification du nom d'affichage
  * - Affichage email (lecture seule)
  * - Badge Premium ou bouton upgrade
+ * - Bouton Préférences (NOUVEAU)
  * - Déconnexion
  * - Suppression de compte avec confirmation
  * - Version de l'app
@@ -457,12 +458,21 @@ export default function ProfileScreen() {
 
           {/* ========== ACTIONS ========== */}
           <View className="bg-white mt-4 mx-4 rounded-2xl px-4 shadow-sm">
+            {/* Préférences */}
+            <MenuOption
+              icon="settings-outline"
+              label="Préférences"
+              onPress={() => router.push("/(main)/preferences")}
+            />
+
+            {/* Déconnexion */}
             <MenuOption
               icon="log-out-outline"
               label="Se déconnecter"
               onPress={handleLogout}
             />
 
+            {/* Suppression */}
             <MenuOption
               icon="trash-outline"
               label="Supprimer mon compte"
