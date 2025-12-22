@@ -1,7 +1,7 @@
 module.exports = {
   root: true,
   env: {
-    es6: true,
+    es2022: true,
     node: true,
   },
   extends: [
@@ -10,22 +10,24 @@ module.exports = {
   ],
   parser: "@typescript-eslint/parser",
   parserOptions: {
-    project: ["tsconfig.json"],
+    project: ["./tsconfig.json"],
+    tsconfigRootDir: __dirname,
     sourceType: "module",
+    ecmaVersion: 2022,
   },
   ignorePatterns: [
-    "/lib/**/*", // Ignore built files.
-    "/generated/**/*", // Ignore generated files.
+    "/lib/**/*",
+    "/generated/**/*",
+    "node_modules/**/*",
   ],
   plugins: [
     "@typescript-eslint",
     "import",
   ],
   rules: {
-    // Désactiver les règles trop strictes pour le développement
-    "@typescript-eslint/no-explicit-any": "warn", // Avertissement au lieu d'erreur
-    "@typescript-eslint/no-unused-vars": ["error", { 
-      "argsIgnorePattern": "^_", // Ignorer les paramètres préfixés par _
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-unused-vars": ["error", {
+      "argsIgnorePattern": "^_",
       "varsIgnorePattern": "^_"
     }],
     "quotes": ["error", "double"],
@@ -33,7 +35,7 @@ module.exports = {
     "indent": ["error", 2],
     "max-len": ["warn", { "code": 120 }],
     "object-curly-spacing": ["error", "always"],
-    "require-jsdoc": 0, // Désactiver l'obligation de JSDoc
+    "require-jsdoc": 0,
     "valid-jsdoc": 0,
   },
 };
