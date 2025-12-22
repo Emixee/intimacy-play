@@ -14,7 +14,7 @@
  */
 
 import { Platform } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import { ApiResponse } from "../types";
 import { LIMITS, STORAGE_KEYS } from "../utils/constants";
 
@@ -24,7 +24,7 @@ import { LIMITS, STORAGE_KEYS } from "../utils/constants";
 
 /**
  * IDs des annonces AdMob
- * 
+ *
  * En développement, utilise les IDs de test officiels
  * En production, remplacer par vos propres IDs
  */
@@ -91,18 +91,18 @@ export interface RewardedAdResult {
 }
 
 /** État de la connexion AdMob */
-export type AdMobConnectionState = 
-  | "not_initialized" 
-  | "initializing" 
-  | "initialized" 
+export type AdMobConnectionState =
+  | "not_initialized"
+  | "initializing"
+  | "initialized"
   | "error";
 
 /** État du chargement d'une pub */
-export type AdLoadState = 
-  | "not_loaded" 
-  | "loading" 
-  | "loaded" 
-  | "showing" 
+export type AdLoadState =
+  | "not_loaded"
+  | "loading"
+  | "loaded"
+  | "showing"
   | "error";
 
 // ============================================================
@@ -169,7 +169,9 @@ export const adsService = {
       // });
 
       // Mock pour le développement
-      console.log("[AdsService] Mock initialization (react-native-google-mobile-ads not installed)");
+      console.log(
+        "[AdsService] Mock initialization (react-native-google-mobile-ads not installed)"
+      );
       await this._mockDelay(500);
 
       this._isInitialized = true;
@@ -199,10 +201,7 @@ export const adsService = {
    * Précharge les publicités pour un affichage plus rapide
    */
   async preloadAds(): Promise<void> {
-    await Promise.all([
-      this._loadInterstitial(),
-      this._loadRewarded(),
-    ]);
+    await Promise.all([this._loadInterstitial(), this._loadRewarded()]);
   },
 
   // ----------------------------------------------------------
@@ -266,7 +265,9 @@ export const adsService = {
    * @param isPremium - Si l'utilisateur est premium (ne pas afficher)
    * @returns Promise<ApiResponse> avec le statut
    */
-  async showInterstitial(isPremium: boolean = false): Promise<ApiResponse<{ shown: boolean }>> {
+  async showInterstitial(
+    isPremium: boolean = false
+  ): Promise<ApiResponse<{ shown: boolean }>> {
     // Ne pas afficher de pub aux utilisateurs premium
     if (isPremium) {
       console.log("[AdsService] User is premium, skipping interstitial");
@@ -522,7 +523,7 @@ export const adsService = {
   },
 
   // ----------------------------------------------------------
-  // GESTION DES PARTIES GRATUITES
+  // GESTION DES PARTIES GRATUITES (avec expo-secure-store)
   // ----------------------------------------------------------
 
   /**
@@ -530,17 +531,17 @@ export const adsService = {
    */
   async getFreeGamesToday(): Promise<number> {
     try {
-      const lastDateStr = await AsyncStorage.getItem(STORAGE_KEY_LAST_DATE);
+      const lastDateStr = await SecureStore.getItemAsync(STORAGE_KEY_LAST_DATE);
       const today = this._getTodayString();
 
       // Si la date a changé, réinitialiser
       if (lastDateStr !== today) {
-        await AsyncStorage.setItem(STORAGE_KEY_LAST_DATE, today);
-        await AsyncStorage.setItem(STORAGE_KEY_FREE_GAMES, "0");
+        await SecureStore.setItemAsync(STORAGE_KEY_LAST_DATE, today);
+        await SecureStore.setItemAsync(STORAGE_KEY_FREE_GAMES, "0");
         return 0;
       }
 
-      const countStr = await AsyncStorage.getItem(STORAGE_KEY_FREE_GAMES);
+      const countStr = await SecureStore.getItemAsync(STORAGE_KEY_FREE_GAMES);
       return parseInt(countStr || "0", 10);
     } catch (error) {
       console.error("[AdsService] getFreeGamesToday error:", error);
@@ -556,8 +557,14 @@ export const adsService = {
       const current = await this.getFreeGamesToday();
       const newCount = Math.min(current + 1, MAX_FREE_GAMES_FROM_ADS);
 
-      await AsyncStorage.setItem(STORAGE_KEY_FREE_GAMES, newCount.toString());
-      await AsyncStorage.setItem(STORAGE_KEY_LAST_DATE, this._getTodayString());
+      await SecureStore.setItemAsync(
+        STORAGE_KEY_FREE_GAMES,
+        newCount.toString()
+      );
+      await SecureStore.setItemAsync(
+        STORAGE_KEY_LAST_DATE,
+        this._getTodayString()
+      );
 
       return newCount;
     } catch (error) {
