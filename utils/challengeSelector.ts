@@ -1,10 +1,15 @@
 /**
  * Algorithme de sélection des défis pour Intimacy Play
  *
+ * PROMPT 1.3-v3 : Préférences séparées par joueur
+ * - Chaque joueur a ses propres thèmes, jouets, préférences média
+ * - Les défis du créateur sont filtrés selon ses préférences
+ * - Les défis du partenaire sont filtrés selon ses préférences
+ *
  * Fonctionnalités :
- * - Filtrage par thèmes sélectionnés
- * - Filtrage par jouets disponibles
- * - Filtrage par préférences média (photo/audio/video)
+ * - Filtrage par thèmes sélectionnés (par joueur)
+ * - Filtrage par jouets disponibles (par joueur)
+ * - Filtrage par préférences média (par joueur)
  * - Progression d'intensité (0-40% niveau de départ, 40-70% +1, etc.)
  * - Alternance créateur/partenaire
  * - Gestion des couples de même genre via forPlayer
@@ -30,7 +35,26 @@ import {
 // ============================================================
 
 /**
+ * Préférences d'un joueur (thèmes, jouets, médias)
+ */
+export interface PlayerPreferences {
+  /** Thèmes sélectionnés */
+  selectedThemes: string[];
+  /** Inclure les défis avec jouets */
+  includeToys: boolean;
+  /** Liste des jouets disponibles */
+  availableToys: string[];
+  /** Préférences média */
+  mediaPreferences: {
+    photo: boolean;
+    audio: boolean;
+    video: boolean;
+  };
+}
+
+/**
  * Configuration pour la sélection des défis
+ * PROMPT 1.3-v3 : Préférences séparées par joueur
  */
 export interface SelectionConfig {
   /** Genre du créateur de la session */
@@ -43,18 +67,15 @@ export interface SelectionConfig {
   startIntensity: IntensityLevel;
   /** Si l'utilisateur est premium */
   isPremium: boolean;
-  /** Thèmes sélectionnés (vide = tous) */
-  selectedThemes: string[];
-  /** Inclure les défis avec jouets */
-  includeToys: boolean;
-  /** Liste des jouets disponibles */
-  availableToys: string[];
-  /** Préférences média */
-  mediaPreferences: {
-    photo: boolean;
-    audio: boolean;
-    video: boolean;
-  };
+  
+  // ============================================================
+  // PRÉFÉRENCES PAR JOUEUR (PROMPT 1.3-v3)
+  // ============================================================
+  
+  /** Préférences du créateur */
+  creatorPreferences: PlayerPreferences;
+  /** Préférences du partenaire */
+  partnerPreferences: PlayerPreferences;
 }
 
 /**
@@ -93,6 +114,24 @@ export interface ChallengeAlternatives {
   /** Nombre d'alternatives disponibles */
   availableCount: number;
 }
+
+// ============================================================
+// PRÉFÉRENCES PAR DÉFAUT
+// ============================================================
+
+/**
+ * Préférences par défaut pour un joueur
+ */
+export const DEFAULT_PLAYER_PREFERENCES: PlayerPreferences = {
+  selectedThemes: ["classique"],
+  includeToys: false,
+  availableToys: [],
+  mediaPreferences: {
+    photo: true,
+    audio: true,
+    video: true,
+  },
+};
 
 // ============================================================
 // FONCTIONS UTILITAIRES
@@ -193,9 +232,9 @@ function filterByThemes(
   challenges: ExtendedChallengeTemplate[],
   selectedThemes: string[]
 ): ExtendedChallengeTemplate[] {
-  // Si aucun thème sélectionné, inclure tous
+  // Si aucun thème sélectionné, inclure "classique" par défaut
   if (selectedThemes.length === 0) {
-    return challenges;
+    return challenges.filter((c) => c.theme === "classique");
   }
   return challenges.filter((c) => selectedThemes.includes(c.theme));
 }
@@ -248,18 +287,18 @@ function filterByMaxLevel(
 }
 
 /**
- * Applique tous les filtres de configuration
+ * Applique tous les filtres pour UN joueur
+ * PROMPT 1.3-v3 : Filtrage par préférences individuelles
  */
-function applyAllFilters(
+function applyFiltersForPlayer(
   challenges: ExtendedChallengeTemplate[],
-  config: SelectionConfig
+  preferences: PlayerPreferences,
+  maxLevel: IntensityLevel
 ): ExtendedChallengeTemplate[] {
-  const maxLevel = getMaxLevel(config.isPremium);
-  
   let filtered = challenges;
-  filtered = filterByThemes(filtered, config.selectedThemes);
-  filtered = filterByToys(filtered, config.includeToys, config.availableToys);
-  filtered = filterByMedia(filtered, config.mediaPreferences);
+  filtered = filterByThemes(filtered, preferences.selectedThemes);
+  filtered = filterByToys(filtered, preferences.includeToys, preferences.availableToys);
+  filtered = filterByMedia(filtered, preferences.mediaPreferences);
   filtered = filterByMaxLevel(filtered, maxLevel);
   
   return filtered;
@@ -271,6 +310,7 @@ function applyAllFilters(
 
 /**
  * Sélectionne les défis selon la configuration
+ * PROMPT 1.3-v3 : Préférences séparées par joueur
  */
 export function selectChallenges(config: SelectionConfig): SelectionResult {
   const {
@@ -279,6 +319,8 @@ export function selectChallenges(config: SelectionConfig): SelectionResult {
     count,
     startIntensity,
     isPremium,
+    creatorPreferences,
+    partnerPreferences,
   } = config;
 
   const warnings: string[] = [];
@@ -291,16 +333,30 @@ export function selectChallenges(config: SelectionConfig): SelectionResult {
     maxLevel
   );
 
-  // Charger et filtrer tous les défis
-  const allChallenges = applyAllFilters(getAllChallenges(), config);
+  // ============================================================
+  // FILTRAGE PAR JOUEUR (PROMPT 1.3-v3)
+  // ============================================================
+  
+  // Charger TOUS les défis
+  const allChallenges = getAllChallenges();
+  
+  // Filtrer les défis du créateur selon SES préférences
+  const creatorChallengesFiltered = applyFiltersForPlayer(
+    allChallenges.filter((c) => c.gender === creatorGender),
+    creatorPreferences,
+    maxLevel
+  );
+  
+  // Filtrer les défis du partenaire selon SES préférences
+  const partnerChallengesFiltered = applyFiltersForPlayer(
+    allChallenges.filter((c) => c.gender === partnerGender),
+    partnerPreferences,
+    maxLevel
+  );
 
-  // Séparer par genre
-  const creatorPool = shuffleArray(
-    allChallenges.filter((c) => c.gender === creatorGender)
-  );
-  const partnerPool = shuffleArray(
-    allChallenges.filter((c) => c.gender === partnerGender)
-  );
+  // Mélanger les pools
+  const creatorPool = shuffleArray(creatorChallengesFiltered);
+  const partnerPool = shuffleArray(partnerChallengesFiltered);
 
   // Vérifier si assez de défis
   const creatorCount = distribution.filter((d) => d.forPlayer === "creator").length;
@@ -308,12 +364,12 @@ export function selectChallenges(config: SelectionConfig): SelectionResult {
 
   if (creatorPool.length < creatorCount) {
     warnings.push(
-      `Pas assez de défis pour le créateur (${creatorPool.length}/${creatorCount})`
+      `Pas assez de défis pour le créateur avec ses préférences (${creatorPool.length}/${creatorCount}). Thèmes: ${creatorPreferences.selectedThemes.join(", ")}`
     );
   }
   if (partnerPool.length < partnerCount) {
     warnings.push(
-      `Pas assez de défis pour le partenaire (${partnerPool.length}/${partnerCount})`
+      `Pas assez de défis pour le partenaire avec ses préférences (${partnerPool.length}/${partnerCount}). Thèmes: ${partnerPreferences.selectedThemes.join(", ")}`
     );
   }
 
@@ -454,12 +510,14 @@ function calculateStats(challenges: SessionChallenge[]): SelectionResult["stats"
 
 /**
  * Retourne 2 alternatives pour changer un défi
+ * PROMPT 1.3-v3 : Utilise les préférences du joueur concerné
  * 
  * Selon GAME-MECHANICS.md :
  * - Même niveau d'intensité que le défi actuel
  * - Même genre que le défi actuel
  * - Type de média différent si possible (pour varier)
  * - N'ont pas été utilisés dans la session
+ * - Respecte les préférences du joueur concerné
  */
 export function getAlternatives(
   currentChallenges: SessionChallenge[],
@@ -473,14 +531,25 @@ export function getAlternatives(
   }
 
   const { forPlayer, level, forGender, type: currentType } = challengeToReplace;
+  const maxLevel = getMaxLevel(config.isPremium);
 
-  // Charger et filtrer tous les défis
-  const allChallenges = applyAllFilters(getAllChallenges(), config);
+  // ============================================================
+  // UTILISER LES PRÉFÉRENCES DU JOUEUR CONCERNÉ (PROMPT 1.3-v3)
+  // ============================================================
+  const playerPreferences = forPlayer === "creator" 
+    ? config.creatorPreferences 
+    : config.partnerPreferences;
 
-  // Filtrer par genre et niveau (même que le défi actuel)
-  const candidates = allChallenges.filter(
-    (c) => c.gender === forGender && c.level === level
+  // Charger et filtrer les défis selon les préférences du joueur
+  const allChallenges = getAllChallenges();
+  const filteredChallenges = applyFiltersForPlayer(
+    allChallenges.filter((c) => c.gender === forGender),
+    playerPreferences,
+    maxLevel
   );
+
+  // Filtrer par niveau (même que le défi actuel)
+  const candidates = filteredChallenges.filter((c) => c.level === level);
 
   // Exclure les défis déjà utilisés dans la session
   const usedTexts = new Set(currentChallenges.map((c) => c.text));
@@ -605,19 +674,26 @@ export function calculateProgress(challenges: SessionChallenge[]): {
 
 /**
  * Compte les défis disponibles avant sélection (pour preview)
+ * PROMPT 1.3-v3 : Par joueur avec leurs préférences
  */
 export function countAvailableChallenges(config: SelectionConfig): {
   creator: Record<IntensityLevel, number>;
   partner: Record<IntensityLevel, number>;
   total: number;
 } {
-  const allChallenges = applyAllFilters(getAllChallenges(), config);
+  const maxLevel = getMaxLevel(config.isPremium);
+  const allChallenges = getAllChallenges();
 
-  const creatorChallenges = allChallenges.filter(
-    (c) => c.gender === config.creatorGender
+  // Filtrer selon les préférences de chaque joueur
+  const creatorChallenges = applyFiltersForPlayer(
+    allChallenges.filter((c) => c.gender === config.creatorGender),
+    config.creatorPreferences,
+    maxLevel
   );
-  const partnerChallenges = allChallenges.filter(
-    (c) => c.gender === config.partnerGender
+  const partnerChallenges = applyFiltersForPlayer(
+    allChallenges.filter((c) => c.gender === config.partnerGender),
+    config.partnerPreferences,
+    maxLevel
   );
 
   const countByLevel = (
@@ -632,7 +708,7 @@ export function countAvailableChallenges(config: SelectionConfig): {
   return {
     creator: countByLevel(creatorChallenges),
     partner: countByLevel(partnerChallenges),
-    total: allChallenges.length,
+    total: creatorChallenges.length + partnerChallenges.length,
   };
 }
 
@@ -683,4 +759,5 @@ export default {
   countAvailableChallenges,
   getChallengeCountByLevel,
   canChangeChallenge,
+  DEFAULT_PLAYER_PREFERENCES,
 };
