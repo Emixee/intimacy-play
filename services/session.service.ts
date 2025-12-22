@@ -7,6 +7,9 @@
  * - Rejoindre une session
  * - Synchronisation temps réel
  * - Progression des défis
+ * - Changement de défi avec alternatives
+ *
+ * PROMPT 4.2 : Ajout vérifications premium + getCurrentChallenge + addBonusChanges
  * 
  * FIX BUG COUPLES MÊME GENRE :
  * La validation utilise maintenant forPlayer (rôle) au lieu de forGender
@@ -27,7 +30,15 @@ import {
   PlayerRole,
   CreateSessionData,
   ApiResponse,
+  CHALLENGE_COUNT_FREE,
+  MAX_CHALLENGE_CHANGES,
+  MAX_BONUS_CHANGES,
 } from "../types";
+import {
+  getAlternatives,
+  SelectionConfig,
+  ChallengeAlternatives,
+} from "../utils/challengeSelector";
 
 // ============================================================
 // MESSAGES D'ERREUR EN FRANÇAIS
@@ -47,6 +58,11 @@ const SESSION_ERROR_MESSAGES: Record<string, string> = {
   CHALLENGE_ALREADY_COMPLETED: "Ce défi a déjà été accompli",
   NOT_YOUR_TURN: "Ce n'est pas votre tour de valider",
   NO_CHANGES_LEFT: "Vous n'avez plus de changements disponibles",
+  PREMIUM_REQUIRED: "Cette fonctionnalité nécessite un abonnement Premium",
+  CHALLENGE_COUNT_EXCEEDED: "Le nombre de défis dépasse la limite gratuite",
+  INTENSITY_LEVEL_LOCKED: "Ce niveau d'intensité est réservé aux Premium",
+  TOYS_PREMIUM_ONLY: "Les défis avec jouets sont réservés aux Premium",
+  MAX_BONUS_REACHED: "Vous avez atteint le maximum de bonus",
   UNKNOWN_ERROR: "Une erreur est survenue",
   NETWORK_ERROR: "Erreur de connexion. Vérifiez votre réseau",
 };
@@ -96,7 +112,6 @@ const isSessionExpired = (createdAt: FirebaseFirestoreTypes.Timestamp): boolean 
 const checkCodeExists = async (normalizedCode: string): Promise<boolean> => {
   try {
     const doc = await sessionsCollection().doc(normalizedCode).get();
-    // FIX: exists() est maintenant une méthode
     return doc.exists();
   } catch (error) {
     console.error("[SessionService] Error checking code:", error);
@@ -136,6 +151,29 @@ const getUserRoleInSession = (session: Session | Omit<Session, "id">, odfsdfhdjs
 };
 
 // ============================================================
+// INTERFACE DE CONFIGURATION ÉTENDUE
+// ============================================================
+
+/**
+ * Configuration étendue pour la création de session
+ * Inclut les options premium
+ */
+export interface ExtendedCreateSessionData extends CreateSessionData {
+  /** Thèmes sélectionnés (Premium) */
+  selectedThemes?: string[];
+  /** Inclure les défis avec jouets (Premium) */
+  includeToys?: boolean;
+  /** Jouets disponibles (Premium) */
+  availableToys?: string[];
+  /** Préférences média */
+  mediaPreferences?: {
+    photo: boolean;
+    audio: boolean;
+    video: boolean;
+  };
+}
+
+// ============================================================
 // SERVICE DE SESSION
 // ============================================================
 
@@ -157,16 +195,65 @@ export const sessionService = {
    */
   generateUniqueCode: generateUniqueSessionCode,
 
+  // ============================================================
+  // VÉRIFICATIONS PREMIUM (Prompt 4.2)
+  // ============================================================
+
   /**
-   * Crée une nouvelle session
+   * Vérifie les restrictions premium pour la configuration
+   * @returns null si OK, sinon le message d'erreur
+   */
+  validatePremiumRestrictions: (
+    config: ExtendedCreateSessionData,
+    isPremium: boolean
+  ): string | null => {
+    // Vérification nombre de défis (> 15 = premium)
+    if (config.challengeCount > CHALLENGE_COUNT_FREE.max && !isPremium) {
+      return getSessionErrorMessage("CHALLENGE_COUNT_EXCEEDED");
+    }
+
+    // Vérification niveau d'intensité (niveau 4 = premium)
+    if (config.startIntensity > 3 && !isPremium) {
+      return getSessionErrorMessage("INTENSITY_LEVEL_LOCKED");
+    }
+
+    // Vérification jouets (premium uniquement)
+    if (config.includeToys && !isPremium) {
+      return getSessionErrorMessage("TOYS_PREMIUM_ONLY");
+    }
+
+    return null; // OK
+  },
+
+  /**
+   * Crée une nouvelle session avec vérifications premium
+   * 
+   * PROMPT 4.2 : Ajout des vérifications :
+   * - challengeCount > 15 → vérifier premium
+   * - startIntensity > 3 → vérifier premium  
+   * - includeToys → vérifier premium
    */
   createSession: async (
     creatorId: string,
     creatorGender: Gender,
-    config: CreateSessionData,
-    challenges: SessionChallenge[]
+    config: ExtendedCreateSessionData,
+    challenges: SessionChallenge[],
+    isPremium: boolean = false
   ): Promise<ApiResponse<string>> => {
     try {
+      // ============================================================
+      // VÉRIFICATIONS PREMIUM (Prompt 4.2)
+      // ============================================================
+      const premiumError = sessionService.validatePremiumRestrictions(config, isPremium);
+      if (premiumError) {
+        console.warn("[SessionService] Premium restriction:", premiumError);
+        return {
+          success: false,
+          error: premiumError,
+          code: "PREMIUM_REQUIRED",
+        };
+      }
+
       const sessionCode = await generateUniqueSessionCode();
       const normalizedCode = normalizeCode(sessionCode);
 
@@ -223,7 +310,6 @@ export const sessionService = {
       const sessionRef = sessionsCollection().doc(normalizedCode);
       const sessionDoc = await sessionRef.get();
 
-      // FIX: exists() est maintenant une méthode
       if (!sessionDoc.exists()) {
         return {
           success: false,
@@ -268,6 +354,7 @@ export const sessionService = {
         };
       }
 
+      // Rejoindre et démarrer la session (startSession intégré)
       await sessionRef.update({
         partnerId,
         partnerGender,
@@ -305,7 +392,6 @@ export const sessionService = {
     try {
       const sessionDoc = await sessionsCollection().doc(normalizedCode).get();
 
-      // FIX: exists() est maintenant une méthode
       if (!sessionDoc.exists()) {
         return {
           success: false,
@@ -324,6 +410,60 @@ export const sessionService = {
       };
     } catch (error: any) {
       console.error("[SessionService] Get session error:", error);
+      return {
+        success: false,
+        error: getSessionErrorMessage("UNKNOWN_ERROR"),
+      };
+    }
+  },
+
+  // ============================================================
+  // GET CURRENT CHALLENGE (Prompt 4.2)
+  // ============================================================
+
+  /**
+   * Récupère le défi actuel d'une session
+   */
+  getCurrentChallenge: async (
+    sessionCode: string
+  ): Promise<ApiResponse<{ challenge: SessionChallenge; index: number } | null>> => {
+    const normalizedCode = normalizeCode(sessionCode);
+
+    try {
+      const sessionDoc = await sessionsCollection().doc(normalizedCode).get();
+
+      if (!sessionDoc.exists()) {
+        return {
+          success: false,
+          error: getSessionErrorMessage("SESSION_NOT_FOUND"),
+        };
+      }
+
+      const session = sessionDoc.data() as Omit<Session, "id">;
+
+      if (session.status !== "active") {
+        return {
+          success: true,
+          data: null,
+        };
+      }
+
+      const index = session.currentChallengeIndex;
+      const challenge = session.challenges[index];
+
+      if (!challenge) {
+        return {
+          success: true,
+          data: null,
+        };
+      }
+
+      return {
+        success: true,
+        data: { challenge, index },
+      };
+    } catch (error: any) {
+      console.error("[SessionService] Get current challenge error:", error);
       return {
         success: false,
         error: getSessionErrorMessage("UNKNOWN_ERROR"),
@@ -359,7 +499,6 @@ export const sessionService = {
       .doc(normalizedCode)
       .onSnapshot(
         (doc) => {
-          // FIX: exists() est maintenant une méthode
           if (doc.exists()) {
             const session: Session = {
               id: doc.id,
@@ -425,7 +564,6 @@ export const sessionService = {
       const sessionRef = sessionsCollection().doc(normalizedCode);
       const sessionDoc = await sessionRef.get();
 
-      // FIX: exists() est maintenant une méthode
       if (!sessionDoc.exists()) {
         return {
           success: false,
@@ -528,6 +666,37 @@ export const sessionService = {
     }
   },
 
+  // ============================================================
+  // GET ALTERNATIVES (Prompt 4.2)
+  // ============================================================
+
+  /**
+   * Récupère 2 alternatives pour changer un défi
+   */
+  getChallengeAlternatives: (
+    session: Session,
+    challengeIndex: number,
+    isPremium: boolean
+  ): ChallengeAlternatives => {
+    const config: SelectionConfig = {
+      creatorGender: session.creatorGender,
+      partnerGender: session.partnerGender || session.creatorGender,
+      count: session.challengeCount,
+      startIntensity: session.startIntensity,
+      isPremium,
+      selectedThemes: [],
+      includeToys: false,
+      availableToys: [],
+      mediaPreferences: {
+        photo: true,
+        audio: true,
+        video: true,
+      },
+    };
+
+    return getAlternatives(session.challenges, challengeIndex, config);
+  },
+
   /**
    * Échange un défi et incrémente le compteur de changements
    */
@@ -535,7 +704,8 @@ export const sessionService = {
     sessionCode: string,
     challengeIndex: number,
     newChallenge: SessionChallenge,
-    odfsdfhdjsud: string
+    odfsdfhdjsud: string,
+    isPremium: boolean = false
   ): Promise<ApiResponse> => {
     const normalizedCode = normalizeCode(sessionCode);
 
@@ -543,7 +713,6 @@ export const sessionService = {
       const sessionRef = sessionsCollection().doc(normalizedCode);
       const sessionDoc = await sessionRef.get();
 
-      // FIX: exists() est maintenant une méthode
       if (!sessionDoc.exists()) {
         return {
           success: false,
@@ -567,6 +736,24 @@ export const sessionService = {
           success: false,
           error: getSessionErrorMessage("NOT_SESSION_MEMBER"),
         };
+      }
+
+      // Vérifier s'il reste des changements (sauf Premium illimité)
+      if (!isPremium) {
+        const changesUsed = userRole === "creator" 
+          ? session.creatorChangesUsed 
+          : session.partnerChangesUsed;
+        const bonusChanges = userRole === "creator"
+          ? session.creatorBonusChanges
+          : session.partnerBonusChanges;
+        const maxChanges = MAX_CHALLENGE_CHANGES + bonusChanges;
+
+        if (changesUsed >= maxChanges) {
+          return {
+            success: false,
+            error: getSessionErrorMessage("NO_CHANGES_LEFT"),
+          };
+        }
       }
 
       // Mettre à jour les défis
@@ -598,6 +785,104 @@ export const sessionService = {
     }
   },
 
+  // ============================================================
+  // ADD BONUS CHANGES (Prompt 4.2 - pour pubs rewarded)
+  // ============================================================
+
+  /**
+   * Ajoute des changements bonus via pub rewarded
+   */
+  addBonusChanges: async (
+    sessionCode: string,
+    odfsdfhdjsud: string,
+    bonusAmount: number = 1
+  ): Promise<ApiResponse<number>> => {
+    const normalizedCode = normalizeCode(sessionCode);
+
+    try {
+      const sessionRef = sessionsCollection().doc(normalizedCode);
+      const sessionDoc = await sessionRef.get();
+
+      if (!sessionDoc.exists()) {
+        return {
+          success: false,
+          error: getSessionErrorMessage("SESSION_NOT_FOUND"),
+        };
+      }
+
+      const session = sessionDoc.data() as Omit<Session, "id">;
+      const userRole = getUserRoleInSession(session, odfsdfhdjsud);
+
+      if (!userRole) {
+        return {
+          success: false,
+          error: getSessionErrorMessage("NOT_SESSION_MEMBER"),
+        };
+      }
+
+      // Vérifier le maximum de bonus
+      const currentBonus = userRole === "creator"
+        ? session.creatorBonusChanges
+        : session.partnerBonusChanges;
+
+      if (currentBonus >= MAX_BONUS_CHANGES) {
+        return {
+          success: false,
+          error: getSessionErrorMessage("MAX_BONUS_REACHED"),
+        };
+      }
+
+      const newBonus = Math.min(currentBonus + bonusAmount, MAX_BONUS_CHANGES);
+      const updateData: Partial<Session> = {};
+
+      if (userRole === "creator") {
+        updateData.creatorBonusChanges = newBonus;
+      } else {
+        updateData.partnerBonusChanges = newBonus;
+      }
+
+      await sessionRef.update(updateData);
+
+      console.log(`[SessionService] Bonus added for ${userRole} in session ${sessionCode}: ${newBonus}`);
+
+      return {
+        success: true,
+        data: newBonus,
+      };
+    } catch (error: any) {
+      console.error("[SessionService] Add bonus changes error:", error);
+      return {
+        success: false,
+        error: getSessionErrorMessage("UNKNOWN_ERROR"),
+      };
+    }
+  },
+
+  /**
+   * Récupère les changements restants pour un joueur
+   */
+  getRemainingChanges: (
+    session: Session,
+    userRole: PlayerRole,
+    isPremium: boolean
+  ): { remaining: number; total: number; isUnlimited: boolean } => {
+    if (isPremium) {
+      return { remaining: Infinity, total: Infinity, isUnlimited: true };
+    }
+
+    const changesUsed = userRole === "creator"
+      ? session.creatorChangesUsed
+      : session.partnerChangesUsed;
+    const bonusChanges = userRole === "creator"
+      ? session.creatorBonusChanges
+      : session.partnerBonusChanges;
+
+    const total = MAX_CHALLENGE_CHANGES + bonusChanges;
+    const remaining = Math.max(0, total - changesUsed);
+
+    return { remaining, total, isUnlimited: false };
+  },
+
   /**
    * Abandonne une session
    */
@@ -611,7 +896,6 @@ export const sessionService = {
       const sessionRef = sessionsCollection().doc(normalizedCode);
       const sessionDoc = await sessionRef.get();
 
-      // FIX: exists() est maintenant une méthode
       if (!sessionDoc.exists()) {
         return {
           success: false,
@@ -658,7 +942,6 @@ export const sessionService = {
       const sessionRef = sessionsCollection().doc(normalizedCode);
       const sessionDoc = await sessionRef.get();
 
-      // FIX: exists() est maintenant une méthode
       if (!sessionDoc.exists()) {
         return {
           success: false,
