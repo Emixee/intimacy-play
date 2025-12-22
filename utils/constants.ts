@@ -1,7 +1,7 @@
 /**
  * Constantes globales - Intimacy Play
  * 
- * PROMPT 1.3 v3 : Thèmes basés sur defis_couple_distance_v4.xlsx (24 thèmes)
+ * PROMPT 1.3-v2 : Thèmes basés sur defis_couple_distance_v4.xlsx (24 thèmes)
  * 
  * Contient toutes les constantes de configuration de l'application :
  * - App info
@@ -260,7 +260,7 @@ export const getThemeById = (id: string) => {
 
 /** Vérifie si un thème est premium */
 export const isThemePremium = (id: string): boolean => {
-  return THEME_IDS_PREMIUM.includes(id);
+  return (THEME_IDS_PREMIUM as readonly string[]).includes(id);
 };
 
 // ============================================================
@@ -374,7 +374,7 @@ export const PREMIUM_FEATURES = [
     id: "all_themes",
     icon: "🎭",
     title: "23 thèmes exclusifs",
-    description: "Dom/Sub, Bondage, Oral et plus",
+    description: "Dom/Sub, Bondage, Oral, Anal et plus",
   },
   {
     id: "unlimited_challenges",

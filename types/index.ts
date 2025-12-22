@@ -2,7 +2,7 @@
  * Types TypeScript pour Intimacy Play
  * 
  * PROMPT 4.3 : Ajout des types pour défis partenaires
- * PROMPT 1.3 v2 : Thèmes basés sur defis_couple_distance_v4.xlsx (24 thèmes)
+ * PROMPT 1.3-v2 : Mise à jour des thèmes basés sur defis_couple_distance_v4.xlsx
  * 
  * Aligné avec le code existant ET FIRESTORE-SCHEMA.md
  * Compatible avec services/session.service.ts, services/game.service.ts, etc.
@@ -45,10 +45,10 @@ export type Language = "fr" | "en";
 // THÈMES (24 thèmes basés sur defis_couple_distance_v4.xlsx)
 // ============================================================
 
-/** Thème gratuit (disponible N1-N4) */
+/** Thème gratuit (1) - Disponible niveaux 1-4 */
 export const THEMES_FREE = ["classique"] as const;
 
-/** Thèmes premium (23 thèmes) */
+/** Thèmes premium (23) - Disponibles niveaux 2-4 selon le thème */
 export const THEMES_PREMIUM = [
   "lingerie",
   "dom_sub",

@@ -80,6 +80,12 @@ export default function MainLayout() {
         }}
       />
       <Stack.Screen
+        name="preferences"
+        options={{
+          title: "Préférences",
+        }}
+      />
+      <Stack.Screen
         name="premium"
         options={{
           title: "Premium",
