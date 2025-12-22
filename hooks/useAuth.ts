@@ -1,17 +1,14 @@
 /**
  * Hook d'authentification
  *
- * Gère automatiquement :
- * - L'écoute des changements d'état auth Firebase
- * - Le chargement des données utilisateur depuis Firestore
- * - Le state loading initial
- * - Les actions auth (login, register, logout, etc.)
+ * Version simplifiée qui utilise le store Zustand
+ * L'initialisation est gérée par le store (singleton pattern)
  *
  * Usage:
  * const { user, userData, isAuthenticated, isLoading, login, register, logout } = useAuth();
  */
 
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import { FirebaseAuthTypes } from "@react-native-firebase/auth";
 import { useAuthStore } from "../stores/authStore";
 import { authService } from "../services/auth.service";
@@ -50,88 +47,40 @@ interface UseAuthReturn {
 // ============================================================
 
 export const useAuth = (): UseAuthReturn => {
-  // Store
-  const {
-    firebaseUser,
-    userData,
-    isLoading,
-    isInitialized,
-    setFirebaseUser,
-    setUserData,
-    setLoading,
-    setInitialized,
-    clearAuth,
-  } = useAuthStore();
-
-  // Ref pour le cleanup du listener userData
-  const userDataUnsubscribeRef = useRef<(() => void) | null>(null);
+  // Sélectionner les valeurs individuellement pour éviter les re-renders
+  const firebaseUser = useAuthStore((state) => state.firebaseUser);
+  const userData = useAuthStore((state) => state.userData);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
+  const setLoading = useAuthStore((state) => state.setLoading);
+  const setUserData = useAuthStore((state) => state.setUserData);
+  const initializeAuth = useAuthStore((state) => state.initializeAuth);
 
   // ----------------------------------------------------------
-  // LISTENER AUTH STATE
+  // INITIALISATION (une seule fois globalement)
   // ----------------------------------------------------------
 
   useEffect(() => {
-    console.log("[useAuth] Setting up auth state listener");
-
-    const unsubscribeAuth = authService.onAuthStateChanged(
-      async (user: FirebaseAuthTypes.User | null) => {
-        console.log("[useAuth] Auth state changed:", user?.uid ?? "null");
-
-        // Cleanup previous user data listener
-        if (userDataUnsubscribeRef.current) {
-          userDataUnsubscribeRef.current();
-          userDataUnsubscribeRef.current = null;
-        }
-
-        if (user) {
-          // Utilisateur connecté
-          setFirebaseUser(user);
-
-          // Écouter les changements des données utilisateur
-          userDataUnsubscribeRef.current = authService.onUserDataChanged(
-            user.uid,
-            (data: User | null) => {
-              console.log("[useAuth] User data changed:", data?.displayName ?? "null");
-              setUserData(data);
-              setLoading(false);
-              setInitialized(true);
-            }
-          );
-        } else {
-          // Utilisateur déconnecté
-          clearAuth();
-          setInitialized(true);
-        }
-      }
-    );
-
-    // Cleanup au démontage
-    return () => {
-      console.log("[useAuth] Cleaning up listeners");
-      unsubscribeAuth();
-      if (userDataUnsubscribeRef.current) {
-        userDataUnsubscribeRef.current();
-        userDataUnsubscribeRef.current = null;
-      }
-    };
-  }, [setFirebaseUser, setUserData, setLoading, setInitialized, clearAuth]);
+    const cleanup = initializeAuth();
+    return cleanup;
+  }, [initializeAuth]);
 
   // ----------------------------------------------------------
-  // COMPUTED VALUES
+  // COMPUTED VALUES (mémorisées)
   // ----------------------------------------------------------
 
   const isAuthenticated = firebaseUser !== null;
 
   const isEmailVerified = firebaseUser?.emailVerified ?? false;
 
-  const isPremium = useCallback((): boolean => {
+  const isPremium = useMemo((): boolean => {
     if (!userData?.premium) return false;
     if (!userData.premiumUntil) return false;
     return userData.premiumUntil.toDate() > new Date();
-  }, [userData])();
+  }, [userData?.premium, userData?.premiumUntil]);
 
   // ----------------------------------------------------------
-  // ACTIONS
+  // ACTIONS (stables avec useCallback)
   // ----------------------------------------------------------
 
   /**
@@ -142,7 +91,7 @@ export const useAuth = (): UseAuthReturn => {
       setLoading(true);
       try {
         const result = await authService.login(credentials);
-        // Le listener onAuthStateChanged gère le reste
+        // Le listener onAuthStateChanged dans le store gère le reste
         return result;
       } catch (error: any) {
         setLoading(false);
@@ -163,7 +112,7 @@ export const useAuth = (): UseAuthReturn => {
       setLoading(true);
       try {
         const result = await authService.register(credentials);
-        // Le listener onAuthStateChanged gère le reste
+        // Le listener onAuthStateChanged dans le store gère le reste
         return result;
       } catch (error: any) {
         setLoading(false);
@@ -183,7 +132,7 @@ export const useAuth = (): UseAuthReturn => {
     setLoading(true);
     try {
       const result = await authService.logout();
-      // Le listener onAuthStateChanged gère le reste
+      // Le listener onAuthStateChanged dans le store gère le reste
       return result;
     } catch (error: any) {
       setLoading(false);
