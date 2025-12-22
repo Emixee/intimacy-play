@@ -44,6 +44,23 @@ let isAuthInitialized = false;
 let authUnsubscribe: (() => void) | null = null;
 let userDataUnsubscribe: (() => void) | null = null;
 
+// Helper pour cleanup les listeners de manière sécurisée
+const cleanupUserDataListener = () => {
+  if (userDataUnsubscribe !== null) {
+    userDataUnsubscribe();
+    userDataUnsubscribe = null;
+  }
+};
+
+const cleanupAllListeners = () => {
+  if (authUnsubscribe !== null) {
+    authUnsubscribe();
+    authUnsubscribe = null;
+  }
+  cleanupUserDataListener();
+  isAuthInitialized = false;
+};
+
 // ============================================================
 // CRÉATION DU STORE
 // ============================================================
@@ -78,17 +95,12 @@ export const useAuthStore = create<AuthState>()(
       isAuthInitialized = true;
       console.log("[AuthStore] Initializing auth listener");
       
-      const { setFirebaseUser, setUserData, setLoading, setInitialized, clearAuth } = get();
-      
       // Listener principal d'authentification
       authUnsubscribe = auth().onAuthStateChanged(async (user) => {
         console.log("[AuthStore] Auth state changed:", user?.uid ?? "null");
         
         // Cleanup previous user data listener
-        if (userDataUnsubscribe) {
-          userDataUnsubscribe();
-          userDataUnsubscribe = null;
-        }
+        cleanupUserDataListener();
         
         if (user) {
           // Utilisateur connecté
@@ -141,15 +153,7 @@ export const useAuthStore = create<AuthState>()(
       // Retourne la fonction de cleanup
       return () => {
         console.log("[AuthStore] Cleaning up auth listeners");
-        if (authUnsubscribe) {
-          authUnsubscribe();
-          authUnsubscribe = null;
-        }
-        if (userDataUnsubscribe) {
-          userDataUnsubscribe();
-          userDataUnsubscribe = null;
-        }
-        isAuthInitialized = false;
+        cleanupAllListeners();
       };
     },
   }))
