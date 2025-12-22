@@ -59,7 +59,6 @@ export interface ReactionServiceConfig {
 
 class ReactionService {
   private config: Required<ReactionServiceConfig>;
-  // Fix: Utiliser ReturnType<typeof setTimeout> au lieu de NodeJS.Timeout
   private cleanupTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   constructor(config?: ReactionServiceConfig) {
@@ -291,7 +290,8 @@ class ReactionService {
 
     const unsubscribe = sessionRef.onSnapshot(
       (snapshot) => {
-        if (snapshot.exists) {
+        // Fix: exists() est une méthode dans @react-native-firebase
+        if (snapshot.exists()) {
           const data = snapshot.data();
           const reactions: SessionReaction[] = data?.activeReactions || [];
 
