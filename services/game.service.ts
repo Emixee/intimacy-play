@@ -2,6 +2,7 @@
  * Service de gestion des actions en jeu
  *
  * PROMPT 4.3 : Actions en jeu
+ * PROMPT 7.3 : Intégration ads pour changements bonus
  * 
  * Fonctionnalités :
  * - completeChallenge : Valider un défi
@@ -37,6 +38,8 @@ import {
   SelectionConfig,
   ChallengeAlternatives,
 } from "../utils/challengeSelector";
+// PROMPT 7.3 : Import du service de publicités
+import { adsService } from "./ads.service";
 
 // ============================================================
 // TYPES SPÉCIFIQUES AU JEU
@@ -72,6 +75,12 @@ export interface ChangeChallengeResult {
   totalChanges: number;
   /** Si illimité (Premium) */
   isUnlimited: boolean;
+  /** PROMPT 7.3 : Peut regarder une pub pour un bonus */
+  canWatchAdForBonus: boolean;
+  /** PROMPT 7.3 : Nombre de bonus ads déjà utilisés cette session */
+  adBonusUsed: number;
+  /** PROMPT 7.3 : Maximum de bonus ads par session */
+  adBonusMax: number;
 }
 
 /**
@@ -105,6 +114,8 @@ const GAME_ERROR_MESSAGES: Record<string, string> = {
   PENDING_CHALLENGE_EXISTS: "Un défi partenaire est déjà en attente",
   NO_PENDING_CHALLENGE: "Aucun défi partenaire en attente",
   INVALID_CHALLENGE_TEXT: "Le texte du défi est invalide",
+  AD_FAILED: "La publicité n'a pas pu être affichée",
+  AD_NOT_COMPLETED: "La publicité n'a pas été regardée en entier",
   UNKNOWN_ERROR: "Une erreur est survenue",
 };
 
@@ -142,9 +153,9 @@ const calculateRemainingChanges = (
   session: Session | Omit<Session, "id">,
   userRole: PlayerRole,
   isPremium: boolean
-): { remaining: number; total: number; isUnlimited: boolean } => {
+): { remaining: number; total: number; isUnlimited: boolean; bonusUsed: number } => {
   if (isPremium) {
-    return { remaining: Infinity, total: Infinity, isUnlimited: true };
+    return { remaining: Infinity, total: Infinity, isUnlimited: true, bonusUsed: 0 };
   }
 
   const changesUsed =
@@ -159,7 +170,7 @@ const calculateRemainingChanges = (
   const total = MAX_CHALLENGE_CHANGES + bonusChanges;
   const remaining = Math.max(0, total - changesUsed);
 
-  return { remaining, total, isUnlimited: false };
+  return { remaining, total, isUnlimited: false, bonusUsed: bonusChanges };
 };
 
 // ============================================================
@@ -293,7 +304,7 @@ export const gameService = {
   },
 
   // ============================================================
-  // CHANGE CHALLENGE
+  // CHANGE CHALLENGE (PROMPT 7.3 : Ajout infos ads)
   // ============================================================
 
   /**
@@ -303,6 +314,8 @@ export const gameService = {
    * - Vérifie les bonus via pub si gratuit
    * - Retourne 2 alternatives
    * - Incrémente le compteur si une alternative est choisie
+   * 
+   * PROMPT 7.3 : Ajout des infos sur les pubs rewarded disponibles
    */
   changeChallenge: async (
     sessionCode: string,
@@ -344,7 +357,7 @@ export const gameService = {
       }
 
       // Calculer les changements restants
-      const { remaining, total, isUnlimited } = calculateRemainingChanges(
+      const { remaining, total, isUnlimited, bonusUsed } = calculateRemainingChanges(
         session,
         userRole,
         isPremium
@@ -381,8 +394,11 @@ export const gameService = {
         config
       );
 
+      // PROMPT 7.3 : Calculer si on peut regarder une pub pour bonus
+      const canWatchAdForBonus = !isPremium && bonusUsed < MAX_BONUS_CHANGES;
+
       console.log(
-        `[GameService] Alternatives generated for ${userRole}. Remaining: ${remaining}/${total}`
+        `[GameService] Alternatives generated for ${userRole}. Remaining: ${remaining}/${total}. Can watch ad: ${canWatchAdForBonus}`
       );
 
       return {
@@ -392,6 +408,10 @@ export const gameService = {
           remainingChanges: isUnlimited ? Infinity : remaining,
           totalChanges: total,
           isUnlimited,
+          // PROMPT 7.3 : Nouvelles infos
+          canWatchAdForBonus,
+          adBonusUsed: bonusUsed,
+          adBonusMax: MAX_BONUS_CHANGES,
         },
       };
     } catch (error: any) {
@@ -435,14 +455,17 @@ export const gameService = {
   },
 
   // ============================================================
-  // WATCH AD FOR CHANGE
+  // WATCH AD FOR CHANGE (PROMPT 7.3 : Intégration ads.service)
   // ============================================================
 
   /**
    * Ajoute un changement bonus via pub rewarded
    * 
+   * PROMPT 7.3 : Intègre maintenant ads.service pour afficher la pub
+   * 
+   * - Affiche la pub rewarded
+   * - Si complétée, incrémente le compteur de bonus
    * - Vérifie max 3 bonus par partie
-   * - Incrémente changesFromAds (bonusChanges)
    */
   watchAdForChange: async (
     sessionCode: string,
@@ -483,7 +506,24 @@ export const gameService = {
         };
       }
 
-      // Incrémenter le bonus
+      // PROMPT 7.3 : Afficher la pub rewarded via ads.service
+      const adResult = await adsService.showRewardedForChange(currentBonus);
+
+      if (!adResult.success) {
+        return {
+          success: false,
+          error: adResult.error || getErrorMessage("AD_FAILED"),
+        };
+      }
+
+      if (!adResult.data?.rewarded) {
+        return {
+          success: false,
+          error: getErrorMessage("AD_NOT_COMPLETED"),
+        };
+      }
+
+      // La pub a été regardée, incrémenter le bonus
       const newBonus = currentBonus + 1;
       const updateData: Partial<Session> = {};
 
@@ -496,7 +536,7 @@ export const gameService = {
       await sessionsCollection().doc(normalizedCode).update(updateData);
 
       console.log(
-        `[GameService] Bonus added for ${userRole}. New total: ${newBonus}/${MAX_BONUS_CHANGES}`
+        `[GameService] Bonus added for ${userRole} after watching ad. New total: ${newBonus}/${MAX_BONUS_CHANGES}`
       );
 
       return {
@@ -832,32 +872,42 @@ export const gameService = {
 
   /**
    * Vérifie si un utilisateur peut changer de défi
+   * 
+   * PROMPT 7.3 : Ajout canWatchAd
    */
   canChangeChallenge: (
     session: Session,
     userId: string,
     isPremium: boolean
-  ): { canChange: boolean; remaining: number; reason?: string } => {
+  ): { canChange: boolean; remaining: number; canWatchAd: boolean; reason?: string } => {
     const userRole = getUserRole(session, userId);
     if (!userRole) {
-      return { canChange: false, remaining: 0, reason: "Not a member" };
+      return { canChange: false, remaining: 0, canWatchAd: false, reason: "Not a member" };
     }
 
-    const { remaining, isUnlimited } = calculateRemainingChanges(
+    const { remaining, isUnlimited, bonusUsed } = calculateRemainingChanges(
       session,
       userRole,
       isPremium
     );
 
+    // PROMPT 7.3 : Peut regarder une pub si pas premium et < 3 bonus
+    const canWatchAd = !isPremium && bonusUsed < MAX_BONUS_CHANGES;
+
     if (isUnlimited) {
-      return { canChange: true, remaining: Infinity };
+      return { canChange: true, remaining: Infinity, canWatchAd: false };
     }
 
     if (remaining <= 0) {
-      return { canChange: false, remaining: 0, reason: "No changes left" };
+      return { 
+        canChange: false, 
+        remaining: 0, 
+        canWatchAd, 
+        reason: "No changes left" 
+      };
     }
 
-    return { canChange: true, remaining };
+    return { canChange: true, remaining, canWatchAd };
   },
 
   /**

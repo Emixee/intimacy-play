@@ -10,6 +10,7 @@
  * - Changement de défi avec alternatives
  *
  * PROMPT 4.2 : Ajout vérifications premium + getCurrentChallenge + addBonusChanges
+ * PROMPT 7.3 : Intégration showInterstitial() au début de partie (gratuit)
  * 
  * FIX BUG COUPLES MÊME GENRE :
  * La validation utilise maintenant forPlayer (rôle) au lieu de forGender
@@ -39,6 +40,8 @@ import {
   SelectionConfig,
   ChallengeAlternatives,
 } from "../utils/challengeSelector";
+// PROMPT 7.3 : Import du service de publicités
+import { adsService } from "./ads.service";
 
 // ============================================================
 // MESSAGES D'ERREUR EN FRANÇAIS
@@ -232,6 +235,8 @@ export const sessionService = {
    * - challengeCount > 15 → vérifier premium
    * - startIntensity > 3 → vérifier premium  
    * - includeToys → vérifier premium
+   * 
+   * PROMPT 7.3 : Ajout de showInterstitial() pour les utilisateurs gratuits
    */
   createSession: async (
     creatorId: string,
@@ -252,6 +257,19 @@ export const sessionService = {
           error: premiumError,
           code: "PREMIUM_REQUIRED",
         };
+      }
+
+      // ============================================================
+      // PROMPT 7.3 : Afficher pub interstitielle pour utilisateurs gratuits
+      // ============================================================
+      if (!isPremium) {
+        try {
+          console.log("[SessionService] Showing interstitial for free user");
+          await adsService.showInterstitial(false);
+        } catch (adError) {
+          // Ne pas bloquer la création si la pub échoue
+          console.warn("[SessionService] Interstitial failed, continuing:", adError);
+        }
       }
 
       const sessionCode = await generateUniqueSessionCode();
