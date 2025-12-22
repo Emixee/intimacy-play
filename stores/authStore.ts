@@ -106,10 +106,8 @@ export const useAuthStore = create<AuthState>()(
             .doc(user.uid)
             .onSnapshot(
               (snapshot) => {
-                // Utiliser === true pour éviter l'erreur TypeScript
-                const docExists = snapshot.exists === true;
-                
-                if (docExists) {
+                // exists() est une méthode dans @react-native-firebase
+                if (snapshot.exists()) {
                   const data = { id: snapshot.id, ...snapshot.data() } as User;
                   console.log("[AuthStore] User data updated:", data.displayName ?? "no name");
                   set({ 
