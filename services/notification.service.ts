@@ -1,29 +1,13 @@
 /**
  * Service de notifications push
  * 
- * Utilise @react-native-firebase/messaging pour recevoir les tokens FCM
- * et expo-notifications pour afficher les notifications
+ * Utilise uniquement @react-native-firebase/messaging
+ * - Les notifications background/killed sont affichées automatiquement par Firebase
+ * - Les notifications foreground sont loggées (Android les affiche pas automatiquement)
  */
 
 import messaging from "@react-native-firebase/messaging";
-import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
 import { userService } from "./user.service";
-
-// ============================================================
-// CONFIGURATION EXPO NOTIFICATIONS
-// ============================================================
-
-// Configurer comment les notifications sont affichées en foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 
 // ============================================================
 // TYPES
@@ -50,27 +34,24 @@ export const notificationService = {
     try {
       console.log("[NotificationService] Initializing for user:", userId);
 
-      // 1. Créer le canal Android
-      await this.createNotificationChannel();
-
-      // 2. Demander les permissions
+      // 1. Demander les permissions
       const hasPermission = await this.requestPermission();
       if (!hasPermission) {
         console.log("[NotificationService] Permission denied");
         return;
       }
 
-      // 3. Récupérer et enregistrer le token FCM
+      // 2. Récupérer et enregistrer le token FCM
       const token = await this.getToken();
       if (token) {
         await userService.updateFcmToken(userId, token);
         console.log("[NotificationService] Token registered");
       }
 
-      // 4. Configurer le listener de refresh du token
+      // 3. Configurer le listener de refresh du token
       this.setupTokenRefreshListener(userId);
 
-      // 5. Configurer les handlers de notifications
+      // 4. Configurer les handlers de notifications
       this.setupNotificationHandlers();
 
       console.log("[NotificationService] Initialization complete");
@@ -80,53 +61,17 @@ export const notificationService = {
   },
 
   /**
-   * Crée le canal de notification Android
-   */
-  async createNotificationChannel(): Promise<void> {
-    if (Platform.OS === "android") {
-      await Notifications.setNotificationChannelAsync("game_notifications", {
-        name: "Notifications de jeu",
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: "#EC4899",
-        sound: "default",
-      });
-      console.log("[NotificationService] Android channel created");
-    }
-  },
-
-  /**
    * Demande la permission d'envoyer des notifications
    */
   async requestPermission(): Promise<boolean> {
     try {
-      // Permission Firebase Messaging
       const authStatus = await messaging().requestPermission();
       const enabled =
         authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
         authStatus === messaging.AuthorizationStatus.PROVISIONAL;
 
-      if (!enabled) {
-        console.log("[NotificationService] Firebase permission denied");
-        return false;
-      }
-
-      // Permission Expo Notifications (Android 13+)
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-
-      if (existingStatus !== "granted") {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-
-      if (finalStatus !== "granted") {
-        console.log("[NotificationService] Expo permission denied");
-        return false;
-      }
-
-      console.log("[NotificationService] Permissions granted");
-      return true;
+      console.log("[NotificationService] Permission:", enabled ? "granted" : "denied");
+      return enabled;
     } catch (error) {
       console.error("[NotificationService] Permission error:", error);
       return false;
@@ -162,29 +107,22 @@ export const notificationService = {
    */
   setupNotificationHandlers(): void {
     // Handler pour les notifications reçues en FOREGROUND
-    // Firebase Messaging reçoit le message, on l'affiche avec Expo
+    // Note: Sur Android, les notifications ne s'affichent pas automatiquement en foreground
+    // Elles sont reçues ici et on peut les traiter
     messaging().onMessage(async (remoteMessage) => {
-      console.log("[NotificationService] Foreground message:", remoteMessage);
-
-      const { notification, data } = remoteMessage;
-
-      if (notification) {
-        // Afficher la notification avec Expo Notifications
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: notification.title || "Intimacy Play",
-            body: notification.body || "",
-            data: data as NotificationData,
-            sound: "default",
-          },
-          trigger: null, // Afficher immédiatement
-        });
-      }
+      console.log("[NotificationService] Foreground message received:");
+      console.log("  Title:", remoteMessage.notification?.title);
+      console.log("  Body:", remoteMessage.notification?.body);
+      console.log("  Data:", remoteMessage.data);
+      
+      // TODO: Si tu veux afficher les notifications en foreground,
+      // tu peux utiliser un Toast ou une UI custom
     });
 
     // Handler pour les notifications cliquées en BACKGROUND
     messaging().onNotificationOpenedApp((remoteMessage) => {
-      console.log("[NotificationService] Notification opened from background:", remoteMessage);
+      console.log("[NotificationService] Notification opened from background:");
+      console.log("  Data:", remoteMessage.data);
       const data = remoteMessage.data as NotificationData;
       this.handleNotificationNavigation(data);
     });
@@ -194,18 +132,14 @@ export const notificationService = {
       .getInitialNotification()
       .then((remoteMessage) => {
         if (remoteMessage) {
-          console.log("[NotificationService] App opened from killed state:", remoteMessage);
+          console.log("[NotificationService] App opened from killed state:");
+          console.log("  Data:", remoteMessage.data);
           const data = remoteMessage.data as NotificationData;
           this.handleNotificationNavigation(data);
         }
       });
 
-    // Handler Expo pour les notifications cliquées
-    Notifications.addNotificationResponseReceivedListener((response) => {
-      console.log("[NotificationService] Expo notification response:", response);
-      const data = response.notification.request.content.data as NotificationData;
-      this.handleNotificationNavigation(data);
-    });
+    console.log("[NotificationService] Handlers configured");
   },
 
   /**
@@ -217,7 +151,6 @@ export const notificationService = {
     console.log("[NotificationService] Navigation data:", data);
 
     // TODO: Implémenter la navigation vers la session
-    // Par exemple avec un event emitter ou un store Zustand
     if (data.type === "partner_joined" && data.sessionId) {
       console.log("[NotificationService] Should navigate to session:", data.sessionId);
       // router.push(`/(main)/game?sessionId=${data.sessionId}`);
@@ -235,20 +168,6 @@ export const notificationService = {
     } catch (error) {
       console.error("[NotificationService] Delete token error:", error);
     }
-  },
-
-  /**
-   * Envoie une notification locale (pour tests)
-   */
-  async sendLocalNotification(title: string, body: string): Promise<void> {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        sound: "default",
-      },
-      trigger: null,
-    });
   },
 };
 
