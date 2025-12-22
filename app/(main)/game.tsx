@@ -31,7 +31,17 @@ import {
 } from "../../components/ui";
 import { useSession } from "../../hooks/useSession";
 import { useAuth } from "../../hooks/useAuth";
-import challengesData from "../../data/challenges";
+import {
+  CHALLENGES_N1_HOMME,
+  CHALLENGES_N1_FEMME,
+  CHALLENGES_N2_HOMME,
+  CHALLENGES_N2_FEMME,
+  CHALLENGES_N3_HOMME,
+  CHALLENGES_N3_FEMME,
+  CHALLENGES_N4_HOMME,
+  CHALLENGES_N4_FEMME,
+  ChallengeData,
+} from "../../data/challenges";
 import {
   SessionChallenge,
   ChallengeType,
@@ -49,6 +59,21 @@ interface AlternativeChallenge {
   id: string;
   challenge: SessionChallenge;
 }
+
+// ============================================================
+// MAP DES DÉFIS PAR NIVEAU ET GENRE
+// ============================================================
+
+const CHALLENGES_MAP: Record<string, ChallengeData[]> = {
+  "1_HOMME": CHALLENGES_N1_HOMME,
+  "1_FEMME": CHALLENGES_N1_FEMME,
+  "2_HOMME": CHALLENGES_N2_HOMME,
+  "2_FEMME": CHALLENGES_N2_FEMME,
+  "3_HOMME": CHALLENGES_N3_HOMME,
+  "3_FEMME": CHALLENGES_N3_FEMME,
+  "4_HOMME": CHALLENGES_N4_HOMME,
+  "4_FEMME": CHALLENGES_N4_FEMME,
+};
 
 // ============================================================
 // HELPERS
@@ -81,7 +106,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 
 /**
  * Génère des défis alternatifs RÉELS depuis la base de données
- * 
+ *
  * FIX BUG COUPLES MÊME GENRE :
  * Préserve forPlayer du défi original pour que le nouveau défi
  * soit toujours attribué au même joueur (même rôle)
@@ -91,24 +116,42 @@ const generateAlternatives = (
   usedTexts: string[],
   count: number = 2
 ): AlternativeChallenge[] => {
+  // Vérification de sécurité des propriétés requises
+  if (!currentChallenge) {
+    console.warn("[generateAlternatives] currentChallenge is undefined");
+    return [];
+  }
+
   const { level, forGender, forPlayer } = currentChallenge;
+
+  // Vérifier que forGender existe et est valide
+  if (!forGender || (forGender !== "homme" && forGender !== "femme")) {
+    console.warn("[generateAlternatives] forGender is invalid:", forGender);
+    return [];
+  }
+
+  // Vérifier que level existe et est valide
+  if (!level || level < 1 || level > 4) {
+    console.warn("[generateAlternatives] level is invalid:", level);
+    return [];
+  }
 
   // Construire la clé pour accéder aux défis
   const genderKey = forGender.toUpperCase() as "HOMME" | "FEMME";
-  const challengeArrayKey = `CHALLENGES_N${level}_${genderKey}` as keyof typeof challengesData;
+  const mapKey = `${level}_${genderKey}`;
 
   // Récupérer le tableau de défis correspondant
-  const challengeArray = challengesData[challengeArrayKey];
+  const challengeArray = CHALLENGES_MAP[mapKey];
 
   if (!challengeArray || !Array.isArray(challengeArray)) {
-    console.warn(`[generateAlternatives] No challenges found for ${challengeArrayKey}`);
+    console.warn(`[generateAlternatives] No challenges found for ${mapKey}`);
     return [];
   }
 
   // Filtrer les défis déjà utilisés (y compris le défi actuel)
-  const allUsedTexts = [...usedTexts, currentChallenge.text];
+  const allUsedTexts = [...(usedTexts || []), currentChallenge.text];
   const availableChallenges = challengeArray.filter(
-    (c: { text: string }) => !allUsedTexts.includes(c.text)
+    (c: ChallengeData) => !allUsedTexts.includes(c.text)
   );
 
   // Mélanger et prendre le nombre demandé
@@ -117,7 +160,7 @@ const generateAlternatives = (
 
   // Convertir en SessionChallenge
   // FIX: Préserver forPlayer du défi original !
-  return selected.map((c: { text: string; type: ChallengeType; theme: string }, index: number) => ({
+  return selected.map((c: ChallengeData, index: number) => ({
     id: `alt-${index}-${Date.now()}`,
     challenge: {
       text: c.text,
@@ -345,7 +388,13 @@ function ActionButtons({
           fullWidth
           disabled={!canChange || isLoading}
           onPress={onSkip}
-          icon={<Ionicons name="shuffle-outline" size={20} color={canChange ? "#EC4899" : "#9CA3AF"} />}
+          icon={
+            <Ionicons
+              name="shuffle-outline"
+              size={20}
+              color={canChange ? "#EC4899" : "#9CA3AF"}
+            />
+          }
         />
       )}
     </View>
@@ -393,7 +442,11 @@ function AlternativesModal({
             <ScrollView className="max-h-96 px-5 py-4">
               {alternatives.length === 0 ? (
                 <View className="items-center py-8">
-                  <Ionicons name="alert-circle-outline" size={48} color="#9CA3AF" />
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={48}
+                    color="#9CA3AF"
+                  />
                   <Text className="text-gray-500 mt-2 text-center">
                     Aucune alternative disponible pour ce niveau.
                   </Text>
@@ -681,7 +734,10 @@ export default function GameScreen() {
    * Ouvre la modal de changement de défi
    */
   const handleOpenAlternatives = useCallback(() => {
-    if (!currentChallenge) return;
+    if (!currentChallenge) {
+      console.warn("[handleOpenAlternatives] No current challenge");
+      return;
+    }
 
     // Générer des alternatives depuis la vraie base de données
     const alts = generateAlternatives(currentChallenge, usedChallengeTexts, 2);
