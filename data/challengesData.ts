@@ -1,11 +1,11 @@
 /**
  * Wrapper pour enrichir les défis existants avec la structure étendue
- * 
+ *
  * Ce fichier :
  * 1. Importe les défis existants depuis challenges.ts
  * 2. Ajoute automatiquement : id, hasToy, toyName
  * 3. Détecte les jouets mentionnés dans le texte des défis
- * 
+ *
  * Structure étendue :
  * - id: Identifiant unique (format: n{level}_{h/f}_{numero})
  * - hasToy: Si le défi nécessite un jouet (détecté automatiquement)
@@ -16,8 +16,6 @@ import type {
   Gender,
   IntensityLevel,
   ChallengeType,
-  SessionChallenge,
-  PlayerRole,
 } from "../types";
 
 // Import des défis existants
@@ -74,16 +72,25 @@ interface RawChallengeData {
  * Clé = toyName (ID du jouet), Valeur = mots-clés à chercher
  */
 const TOY_KEYWORDS: Record<string, string[]> = {
-  vibrator: ["vibromasseur", "vibro", "vibrant", "vibrateur"],
-  handcuffs: ["menottes", "menotte", "attache", "attaché", "attachée", "attachées"],
+  vibrator: ["vibromasseur", "vibro", "vibrant", "vibrateur", "œuf vibrant"],
+  handcuffs: ["menottes", "menotte", "attaché", "attachée", "attachées", "attachés"],
   blindfold: ["bandeau", "yeux bandés", "les yeux bandés", "aveugle"],
   anal_plug: ["plug", "plug anal"],
-  dildo: ["gode", "dildo", "gode-ceinture", "strap-on", "strap on"],
-  cock_ring: ["cockring", "cock ring", "anneau"],
+  dildo: ["gode", "dildo", "gode-ceinture", "strap-on", "strap on", "gode ventouse"],
+  cock_ring: ["cockring", "cock ring", "anneau vibrant", "anneau"],
   massage_oil: ["huile", "huile de massage", "lubrifiant", "lubrifié", "lubrifiée"],
   feathers: ["plume", "plumes"],
-  nipple_clamps: ["pince", "pinces", "pince à tétons", "pinces à tétons", "pince à linge", "pinces à linge"],
+  nipple_clamps: [
+    "pince",
+    "pinces",
+    "pince à tétons",
+    "pinces à tétons",
+    "pince à linge",
+    "pinces à linge",
+  ],
   collar: ["collier", "laisse"],
+  masturbator: ["masturbateur"],
+  prostate_stimulator: ["stimulateur prostatique", "prostatique"],
 };
 
 // ============================================================
@@ -95,7 +102,7 @@ const TOY_KEYWORDS: Record<string, string[]> = {
  */
 function detectToy(text: string): { hasToy: boolean; toyName: string | null } {
   const lowerText = text.toLowerCase();
-  
+
   for (const [toyName, keywords] of Object.entries(TOY_KEYWORDS)) {
     for (const keyword of keywords) {
       if (lowerText.includes(keyword.toLowerCase())) {
@@ -103,7 +110,7 @@ function detectToy(text: string): { hasToy: boolean; toyName: string | null } {
       }
     }
   }
-  
+
   return { hasToy: false, toyName: null };
 }
 
@@ -116,11 +123,11 @@ function convertChallenges(
   gender: Gender
 ): ExtendedChallengeTemplate[] {
   const genderCode = gender === "homme" ? "h" : "f";
-  
+
   return rawChallenges.map((raw, index) => {
     const { hasToy, toyName } = detectToy(raw.text);
     const id = `n${level}_${genderCode}_${String(index + 1).padStart(3, "0")}`;
-    
+
     return {
       id,
       text: raw.text,
@@ -196,10 +203,7 @@ export function getAllChallenges(): ExtendedChallengeTemplate[] {
 export function getChallengesByLevel(
   level: IntensityLevel
 ): ExtendedChallengeTemplate[] {
-  return [
-    ...CHALLENGES_MAP[level].homme,
-    ...CHALLENGES_MAP[level].femme,
-  ];
+  return [...CHALLENGES_MAP[level].homme, ...CHALLENGES_MAP[level].femme];
 }
 
 /**
@@ -230,9 +234,7 @@ export function getChallengesByTheme(
 export function getChallengesWithToy(
   toyName: string
 ): ExtendedChallengeTemplate[] {
-  return getAllChallenges().filter(
-    (c) => c.hasToy && c.toyName === toyName
-  );
+  return getAllChallenges().filter((c) => c.hasToy && c.toyName === toyName);
 }
 
 /**
@@ -247,26 +249,31 @@ export function getChallengesWithoutToy(): ExtendedChallengeTemplate[] {
  */
 export function getChallengeStats(): {
   total: number;
-  byLevel: Record<IntensityLevel, { homme: number; femme: number; total: number }>;
+  byLevel: Record<
+    IntensityLevel,
+    { homme: number; femme: number; total: number }
+  >;
   withToys: number;
   byToy: Record<string, number>;
   byType: Record<ChallengeType, number>;
   byTheme: Record<string, number>;
 } {
   const all = getAllChallenges();
-  
+
   // Compter par jouet
   const byToy: Record<string, number> = {};
-  all.filter((c) => c.hasToy && c.toyName).forEach((c) => {
-    byToy[c.toyName!] = (byToy[c.toyName!] || 0) + 1;
-  });
-  
+  all
+    .filter((c) => c.hasToy && c.toyName)
+    .forEach((c) => {
+      byToy[c.toyName!] = (byToy[c.toyName!] || 0) + 1;
+    });
+
   // Compter par thème
   const byTheme: Record<string, number> = {};
   all.forEach((c) => {
     byTheme[c.theme] = (byTheme[c.theme] || 0) + 1;
   });
-  
+
   return {
     total: all.length,
     byLevel: {
@@ -329,10 +336,27 @@ export function getAccessibleLevels(isPremium: boolean): IntensityLevel[] {
  * Retourne le nombre total de défis disponibles par niveau
  */
 export function getChallengeCountByLevel(level: IntensityLevel): number {
-  return (
-    CHALLENGES_MAP[level].homme.length +
-    CHALLENGES_MAP[level].femme.length
-  );
+  return CHALLENGES_MAP[level].homme.length + CHALLENGES_MAP[level].femme.length;
+}
+
+/**
+ * Retourne tous les thèmes uniques
+ */
+export function getAllThemes(): string[] {
+  const themes = new Set<string>();
+  getAllChallenges().forEach((c) => themes.add(c.theme));
+  return Array.from(themes).sort();
+}
+
+/**
+ * Retourne tous les jouets mentionnés dans les défis
+ */
+export function getAllToys(): string[] {
+  const toys = new Set<string>();
+  getAllChallenges()
+    .filter((c) => c.hasToy && c.toyName)
+    .forEach((c) => toys.add(c.toyName!));
+  return Array.from(toys).sort();
 }
 
 // ============================================================
@@ -359,4 +383,6 @@ export default {
   isLevelAccessible,
   getAccessibleLevels,
   getChallengeCountByLevel,
+  getAllThemes,
+  getAllToys,
 };

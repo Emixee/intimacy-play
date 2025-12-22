@@ -8,6 +8,7 @@
  * - Progression d'intensité (0-40% niveau de départ, 40-70% +1, etc.)
  * - Alternance créateur/partenaire
  * - Gestion des couples de même genre via forPlayer
+ * - Retourne 2 alternatives pour le changement de défi
  */
 
 import type {
@@ -81,6 +82,16 @@ interface ProgressionDistribution {
   position: number;
   level: IntensityLevel;
   forPlayer: PlayerRole;
+}
+
+/**
+ * Alternatives pour le changement de défi
+ */
+export interface ChallengeAlternatives {
+  /** Les 2 défis alternatifs proposés */
+  alternatives: SessionChallenge[];
+  /** Nombre d'alternatives disponibles */
+  availableCount: number;
 }
 
 // ============================================================
@@ -236,6 +247,24 @@ function filterByMaxLevel(
   return challenges.filter((c) => c.level <= maxLevel);
 }
 
+/**
+ * Applique tous les filtres de configuration
+ */
+function applyAllFilters(
+  challenges: ExtendedChallengeTemplate[],
+  config: SelectionConfig
+): ExtendedChallengeTemplate[] {
+  const maxLevel = getMaxLevel(config.isPremium);
+  
+  let filtered = challenges;
+  filtered = filterByThemes(filtered, config.selectedThemes);
+  filtered = filterByToys(filtered, config.includeToys, config.availableToys);
+  filtered = filterByMedia(filtered, config.mediaPreferences);
+  filtered = filterByMaxLevel(filtered, maxLevel);
+  
+  return filtered;
+}
+
 // ============================================================
 // FONCTION DE SÉLECTION PRINCIPALE
 // ============================================================
@@ -250,10 +279,6 @@ export function selectChallenges(config: SelectionConfig): SelectionResult {
     count,
     startIntensity,
     isPremium,
-    selectedThemes,
-    includeToys,
-    availableToys,
-    mediaPreferences,
   } = config;
 
   const warnings: string[] = [];
@@ -266,14 +291,8 @@ export function selectChallenges(config: SelectionConfig): SelectionResult {
     maxLevel
   );
 
-  // Charger tous les défis
-  let allChallenges = getAllChallenges();
-
-  // Appliquer les filtres
-  allChallenges = filterByThemes(allChallenges, selectedThemes);
-  allChallenges = filterByToys(allChallenges, includeToys, availableToys);
-  allChallenges = filterByMedia(allChallenges, mediaPreferences);
-  allChallenges = filterByMaxLevel(allChallenges, maxLevel);
+  // Charger et filtrer tous les défis
+  const allChallenges = applyAllFilters(getAllChallenges(), config);
 
   // Séparer par genre
   const creatorPool = shuffleArray(
@@ -430,48 +449,63 @@ function calculateStats(challenges: SessionChallenge[]): SelectionResult["stats"
 }
 
 // ============================================================
-// FONCTIONS UTILITAIRES POUR LE JEU
+// FONCTION POUR OBTENIR 2 ALTERNATIVES (SPEC GAME-MECHANICS.md)
 // ============================================================
 
 /**
- * Obtient un défi de remplacement
+ * Retourne 2 alternatives pour changer un défi
+ * 
+ * Selon GAME-MECHANICS.md :
+ * - Même niveau d'intensité que le défi actuel
+ * - Même genre que le défi actuel
+ * - Type de média différent si possible (pour varier)
+ * - N'ont pas été utilisés dans la session
  */
-export function getReplacementChallenge(
+export function getAlternatives(
   currentChallenges: SessionChallenge[],
   indexToReplace: number,
   config: SelectionConfig
-): SessionChallenge | null {
+): ChallengeAlternatives {
   const challengeToReplace = currentChallenges[indexToReplace];
-  if (!challengeToReplace) return null;
+  
+  if (!challengeToReplace) {
+    return { alternatives: [], availableCount: 0 };
+  }
 
-  const { forPlayer, level, forGender } = challengeToReplace;
+  const { forPlayer, level, forGender, type: currentType } = challengeToReplace;
 
-  // Charger tous les défis
-  let allChallenges = getAllChallenges();
+  // Charger et filtrer tous les défis
+  const allChallenges = applyAllFilters(getAllChallenges(), config);
 
-  // Appliquer les mêmes filtres
-  allChallenges = filterByThemes(allChallenges, config.selectedThemes);
-  allChallenges = filterByToys(allChallenges, config.includeToys, config.availableToys);
-  allChallenges = filterByMedia(allChallenges, config.mediaPreferences);
-  allChallenges = filterByMaxLevel(allChallenges, getMaxLevel(config.isPremium));
-
-  // Filtrer par genre et niveau
+  // Filtrer par genre et niveau (même que le défi actuel)
   const candidates = allChallenges.filter(
     (c) => c.gender === forGender && c.level === level
   );
 
-  // Exclure les défis déjà utilisés
+  // Exclure les défis déjà utilisés dans la session
   const usedTexts = new Set(currentChallenges.map((c) => c.text));
   const available = candidates.filter((c) => !usedTexts.has(c.text));
 
   if (available.length === 0) {
-    return null;
+    return { alternatives: [], availableCount: 0 };
   }
 
-  // Sélectionner aléatoirement
-  const selected = available[Math.floor(Math.random() * available.length)];
+  // Prioriser les défis avec un type différent pour varier
+  const differentType = shuffleArray(
+    available.filter((c) => c.type !== currentType)
+  );
+  const sameType = shuffleArray(
+    available.filter((c) => c.type === currentType)
+  );
 
-  return {
+  // Combiner : d'abord les types différents, puis les mêmes types
+  const sortedCandidates = [...differentType, ...sameType];
+
+  // Prendre les 2 premiers
+  const selectedAlternatives = sortedCandidates.slice(0, 2);
+
+  // Convertir en SessionChallenge
+  const alternatives: SessionChallenge[] = selectedAlternatives.map((selected) => ({
     text: selected.text,
     level: selected.level,
     type: selected.type,
@@ -480,8 +514,17 @@ export function getReplacementChallenge(
     completed: false,
     completedBy: null,
     completedAt: null,
+  }));
+
+  return {
+    alternatives,
+    availableCount: available.length,
   };
 }
+
+// ============================================================
+// FONCTIONS UTILITAIRES POUR LE JEU
+// ============================================================
 
 /**
  * Compte les défis restants par joueur
@@ -568,13 +611,7 @@ export function countAvailableChallenges(config: SelectionConfig): {
   partner: Record<IntensityLevel, number>;
   total: number;
 } {
-  const maxLevel = getMaxLevel(config.isPremium);
-
-  let allChallenges = getAllChallenges();
-  allChallenges = filterByThemes(allChallenges, config.selectedThemes);
-  allChallenges = filterByToys(allChallenges, config.includeToys, config.availableToys);
-  allChallenges = filterByMedia(allChallenges, config.mediaPreferences);
-  allChallenges = filterByMaxLevel(allChallenges, maxLevel);
+  const allChallenges = applyAllFilters(getAllChallenges(), config);
 
   const creatorChallenges = allChallenges.filter(
     (c) => c.gender === config.creatorGender
@@ -608,15 +645,36 @@ export function getChallengeCountByLevel(level: IntensityLevel): number {
   );
 }
 
+/**
+ * Vérifie si un joueur peut encore changer de défi
+ */
+export function canChangeChallenge(
+  changesUsed: number,
+  bonusChanges: number,
+  isPremium: boolean
+): { canChange: boolean; remainingChanges: number } {
+  if (isPremium) {
+    return { canChange: true, remainingChanges: Infinity };
+  }
+
+  const maxChanges = 3 + bonusChanges; // 3 de base + bonus via pub
+  const remaining = maxChanges - changesUsed;
+
+  return {
+    canChange: remaining > 0,
+    remainingChanges: Math.max(0, remaining),
+  };
+}
+
 // ============================================================
 // EXPORT PAR DÉFAUT
 // ============================================================
 
 export default {
   selectChallenges,
+  getAlternatives,
   isLevelAccessible,
   getAccessibleLevels,
-  getReplacementChallenge,
   countRemainingChallenges,
   getCompletionByLevel,
   isLevelCompleted,
@@ -624,4 +682,5 @@ export default {
   calculateProgress,
   countAvailableChallenges,
   getChallengeCountByLevel,
+  canChangeChallenge,
 };
