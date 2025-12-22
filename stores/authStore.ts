@@ -106,7 +106,10 @@ export const useAuthStore = create<AuthState>()(
             .doc(user.uid)
             .onSnapshot(
               (snapshot) => {
-                if (snapshot.exists) {
+                // Utiliser === true pour éviter l'erreur TypeScript
+                const docExists = snapshot.exists === true;
+                
+                if (docExists) {
                   const data = { id: snapshot.id, ...snapshot.data() } as User;
                   console.log("[AuthStore] User data updated:", data.displayName ?? "no name");
                   set({ 
