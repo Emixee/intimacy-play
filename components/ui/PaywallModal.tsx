@@ -1,105 +1,202 @@
 /**
  * PaywallModal - Modal d'upgrade vers Premium
- * 
- * Affiche les avantages premium et les options d'abonnement
+ *
+ * Modal réutilisable pour bloquer les features premium :
+ * - Affiche l'avantage de la feature bloquée
+ * - Propose l'upgrade vers Premium
+ * - Intégré avec le subscription service
+ *
+ * PROMPT 7.2 : PaywallModal amélioré
  */
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Modal } from './Modal';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 
-// Constantes de prix (à synchroniser avec RevenueCat/IAP)
-const PRICING = {
-  monthly: {
-    id: 'premium_monthly',
-    price: '6,99 €',
-    period: 'mois',
-    priceValue: 6.99,
-  },
-  yearly: {
-    id: 'premium_yearly',
-    price: '39,99 €',
-    period: 'an',
-    priceValue: 39.99,
-    monthlyEquivalent: '3,33 €',
-    savings: '52%',
-  },
-};
+import { Modal } from "./Modal";
+import { PremiumFeature } from "../../services/subscription.service";
+import { PRICING, PREMIUM_FEATURES } from "../../utils/constants";
 
-// Avantages Premium
-const PREMIUM_FEATURES = [
-  {
-    icon: 'flame' as const,
-    title: 'Tous les niveaux',
-    description: 'Accès aux niveaux 3 et 4 (Érotique & Explicite)',
-  },
-  {
-    icon: 'color-palette' as const,
-    title: '22 thèmes exclusifs',
-    description: 'Fantasmes, BDSM, Kamasutra, et plus...',
-  },
-  {
-    icon: 'infinite' as const,
-    title: 'Parties illimitées',
-    description: 'Jouez autant que vous voulez',
-  },
-  {
-    icon: 'sparkles' as const,
-    title: 'Réactions exclusives',
-    description: '6 emojis supplémentaires 🥵💦👅🍑😈💋',
-  },
-  {
-    icon: 'game-controller' as const,
-    title: "Jusqu'à 50 défis",
-    description: 'Parties plus longues et intenses',
-  },
-  {
-    icon: 'ban' as const,
-    title: 'Sans publicité',
-    description: 'Profitez sans interruption',
-  },
-];
+// ============================================================
+// TYPES
+// ============================================================
 
 interface PaywallModalProps {
+  /** Visibilité de la modal */
   visible: boolean;
+  /** Callback de fermeture */
   onClose: () => void;
-  onPurchase: (planId: string) => Promise<void>;
+  /** Callback d'achat (optionnel, sinon redirige vers /premium) */
+  onPurchase?: (planId: string) => Promise<void>;
+  /** Feature qui a déclenché le paywall (pour personnalisation) */
+  feature?: PremiumFeature;
+  /** Message personnalisé à afficher */
+  customMessage?: string;
   /** Raison de l'affichage (pour le tracking) */
   triggerReason?: string;
 }
+
+// ============================================================
+// CONFIGURATION DES FEATURES
+// ============================================================
+
+/** Configuration visuelle pour chaque feature */
+const FEATURE_DISPLAY: Record<
+  PremiumFeature,
+  {
+    icon: keyof typeof Ionicons.glyphMap;
+    title: string;
+    description: string;
+    benefit: string;
+  }
+> = {
+  level4: {
+    icon: "flame",
+    title: "Niveaux Explicites",
+    description: "Accédez aux défis les plus audacieux",
+    benefit: "Débloquez les niveaux 3 et 4 pour une expérience sans limites",
+  },
+  unlimitedChanges: {
+    icon: "refresh",
+    title: "Changements illimités",
+    description: "Ne soyez plus limité à 3 changements",
+    benefit: "Changez de défi autant de fois que vous le souhaitez",
+  },
+  premiumReactions: {
+    icon: "heart",
+    title: "Réactions exclusives",
+    description: "Exprimez-vous avec plus d'emojis",
+    benefit: "6 réactions supplémentaires : 🥵💦👅🍑😈💋",
+  },
+  mediaPreferences: {
+    icon: "camera",
+    title: "Préférences médias",
+    description: "Personnalisez les types de médias",
+    benefit: "Choisissez exactement ce que vous voulez recevoir",
+  },
+  partnerNickname: {
+    icon: "heart-circle",
+    title: "Surnom personnalisé",
+    description: "Donnez un petit nom à votre partenaire",
+    benefit: "Personnalisez l'expérience avec un surnom unique",
+  },
+  premiumThemes: {
+    icon: "color-palette",
+    title: "Thèmes exclusifs",
+    description: "22 thèmes pour varier les plaisirs",
+    benefit: "BDSM, Fantasmes, Roleplay, Kamasutra et plus...",
+  },
+  downloadMedia: {
+    icon: "download",
+    title: "Téléchargement",
+    description: "Gardez vos souvenirs",
+    benefit: "Téléchargez les photos et vidéos reçues",
+  },
+  partnerChallenge: {
+    icon: "create",
+    title: "Défis personnalisés",
+    description: "Créez vos propres défis",
+    benefit: "Inventez des défis sur mesure pour votre partenaire",
+  },
+  extendedChallenges: {
+    icon: "infinite",
+    title: "Sessions étendues",
+    description: "Jusqu'à 50 défis par session",
+    benefit: "Des parties plus longues et plus intenses",
+  },
+  unlimitedGames: {
+    icon: "game-controller",
+    title: "Parties illimitées",
+    description: "Jouez sans restriction",
+    benefit: "Fini la limite de 3 parties par jour",
+  },
+  noAds: {
+    icon: "ban",
+    title: "Sans publicité",
+    description: "Une expérience fluide",
+    benefit: "Profitez sans interruption ni distraction",
+  },
+  allToys: {
+    icon: "sparkles",
+    title: "Défis avec jouets",
+    description: "Pimentez vos sessions",
+    benefit: "10 accessoires pour des défis encore plus excitants",
+  },
+};
+
+/** Avantages à afficher dans la liste */
+const QUICK_BENEFITS = [
+  { icon: "flame", text: "Tous les niveaux débloqués" },
+  { icon: "color-palette", text: "22 thèmes exclusifs" },
+  { icon: "infinite", text: "Parties illimitées" },
+  { icon: "ban", text: "Sans publicité" },
+];
+
+// ============================================================
+// COMPOSANT
+// ============================================================
 
 export const PaywallModal: React.FC<PaywallModalProps> = ({
   visible,
   onClose,
   onPurchase,
+  feature,
+  customMessage,
   triggerReason,
 }) => {
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly');
+  const [selectedPlan, setSelectedPlan] = useState<"monthly" | "yearly">("yearly");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handlePurchase = async () => {
-    setIsLoading(true);
-    setError(null);
+  // Récupérer les infos de la feature si spécifiée
+  const featureInfo = feature ? FEATURE_DISPLAY[feature] : null;
 
-    try {
-      const planId = PRICING[selectedPlan].id;
-      await onPurchase(planId);
+  // ----------------------------------------------------------
+  // HANDLERS
+  // ----------------------------------------------------------
+
+  const handlePurchase = async () => {
+    if (onPurchase) {
+      // Utiliser le callback fourni
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const planId =
+          selectedPlan === "monthly"
+            ? PRICING.MONTHLY.googlePlayId
+            : PRICING.YEARLY.googlePlayId;
+
+        await onPurchase(planId);
+        onClose();
+      } catch (err: any) {
+        setError(err.message || "Erreur lors de l'achat");
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // Rediriger vers la page premium
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Erreur lors de l\'achat');
-    } finally {
-      setIsLoading(false);
+      router.push("/(main)/premium");
     }
   };
+
+  const handleViewPlans = () => {
+    onClose();
+    router.push("/(main)/premium");
+  };
+
+  // ----------------------------------------------------------
+  // RENDER
+  // ----------------------------------------------------------
 
   return (
     <Modal
@@ -109,173 +206,197 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({
       showCloseButton={true}
       closeOnOverlayPress={!isLoading}
     >
-      <ScrollView 
-        className="max-h-[80vh]"
+      <ScrollView
+        className="max-h-[85vh]"
         showsVerticalScrollIndicator={false}
+        bounces={false}
       >
         {/* Header avec gradient */}
         <LinearGradient
-          colors={['#EC4899', '#DB2777']}
+          colors={["#EC4899", "#DB2777"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          className="p-6 items-center"
+          className="p-6 items-center rounded-t-2xl"
         >
           <View className="w-16 h-16 bg-white/20 rounded-full items-center justify-center mb-3">
-            <Ionicons name="diamond" size={32} color="white" />
+            {featureInfo ? (
+              <Ionicons name={featureInfo.icon} size={32} color="white" />
+            ) : (
+              <Ionicons name="diamond" size={32} color="white" />
+            )}
           </View>
-          <Text className="text-2xl font-bold text-white">
-            Passez Premium
+
+          <Text className="text-xl font-bold text-white text-center">
+            {featureInfo?.title || "Passez Premium"}
           </Text>
-          <Text className="text-white/80 text-center mt-1">
-            Débloquez toutes les fonctionnalités
+
+          <Text className="text-white/80 text-center mt-2 px-4">
+            {customMessage ||
+              featureInfo?.description ||
+              "Débloquez toutes les fonctionnalités"}
           </Text>
         </LinearGradient>
 
-        {/* Liste des avantages */}
-        <View className="p-4">
-          {PREMIUM_FEATURES.map((feature, index) => (
-            <View 
-              key={index}
-              className="flex-row items-start py-3 border-b border-gray-100"
-            >
-              <View className="w-10 h-10 bg-pink-100 rounded-full items-center justify-center mr-3">
-                <Ionicons name={feature.icon} size={20} color="#EC4899" />
+        {/* Message spécifique à la feature */}
+        {featureInfo && (
+          <View className="mx-4 mt-4 p-4 bg-pink-50 rounded-xl border border-pink-200">
+            <Text className="text-pink-700 text-center font-medium">
+              {featureInfo.benefit}
+            </Text>
+          </View>
+        )}
+
+        {/* Liste des avantages rapides */}
+        <View className="px-4 mt-4">
+          <Text className="text-sm font-semibold text-gray-500 mb-3">
+            Avec Premium, vous obtenez :
+          </Text>
+
+          {QUICK_BENEFITS.map((benefit, index) => (
+            <View key={index} className="flex-row items-center py-2">
+              <View className="w-8 h-8 bg-pink-100 rounded-full items-center justify-center mr-3">
+                <Ionicons
+                  name={benefit.icon as any}
+                  size={16}
+                  color="#EC4899"
+                />
               </View>
-              <View className="flex-1">
-                <Text className="font-semibold text-gray-800">
-                  {feature.title}
-                </Text>
-                <Text className="text-gray-500 text-sm">
-                  {feature.description}
-                </Text>
-              </View>
+              <Text className="flex-1 text-gray-700">{benefit.text}</Text>
+              <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
             </View>
           ))}
         </View>
 
-        {/* Sélection du plan */}
-        <View className="px-4 pb-4">
-          <Text className="text-lg font-semibold text-gray-800 mb-3">
-            Choisissez votre formule
-          </Text>
+        {/* Sélection du plan (si onPurchase fourni) */}
+        {onPurchase && (
+          <View className="px-4 mt-4">
+            <Text className="text-sm font-semibold text-gray-500 mb-3">
+              Choisissez votre formule :
+            </Text>
 
-          {/* Plan annuel (recommandé) */}
-          <TouchableOpacity
-            onPress={() => setSelectedPlan('yearly')}
-            className={`
-              p-4 rounded-xl border-2 mb-3 relative
-              ${selectedPlan === 'yearly' 
-                ? 'border-pink-500 bg-pink-50' 
-                : 'border-gray-200 bg-white'}
-            `}
-          >
-            {/* Badge économie */}
-            <View className="absolute -top-3 right-4 bg-green-500 px-2 py-0.5 rounded-full">
-              <Text className="text-white text-xs font-bold">
-                -{PRICING.yearly.savings}
-              </Text>
-            </View>
-
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center">
-                <View className={`
-                  w-5 h-5 rounded-full border-2 mr-3 items-center justify-center
-                  ${selectedPlan === 'yearly' ? 'border-pink-500 bg-pink-500' : 'border-gray-300'}
-                `}>
-                  {selectedPlan === 'yearly' && (
-                    <Ionicons name="checkmark" size={14} color="white" />
-                  )}
-                </View>
-                <View>
-                  <Text className="font-semibold text-gray-800">Annuel</Text>
-                  <Text className="text-gray-500 text-sm">
-                    {PRICING.yearly.monthlyEquivalent}/mois
-                  </Text>
-                </View>
-              </View>
-              <View className="items-end">
-                <Text className="text-lg font-bold text-gray-800">
-                  {PRICING.yearly.price}
+            {/* Plan annuel */}
+            <TouchableOpacity
+              onPress={() => setSelectedPlan("yearly")}
+              className={`p-4 rounded-xl border-2 mb-2 relative ${
+                selectedPlan === "yearly"
+                  ? "border-pink-500 bg-pink-50"
+                  : "border-gray-200 bg-white"
+              }`}
+            >
+              <View className="absolute -top-2 right-3 bg-green-500 px-2 py-0.5 rounded-full">
+                <Text className="text-white text-xs font-bold">
+                  -{PRICING.YEARLY.savingsPercent}%
                 </Text>
-                <Text className="text-gray-500 text-xs">par an</Text>
               </View>
-            </View>
-          </TouchableOpacity>
 
-          {/* Plan mensuel */}
-          <TouchableOpacity
-            onPress={() => setSelectedPlan('monthly')}
-            className={`
-              p-4 rounded-xl border-2
-              ${selectedPlan === 'monthly' 
-                ? 'border-pink-500 bg-pink-50' 
-                : 'border-gray-200 bg-white'}
-            `}
-          >
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center">
-                <View className={`
-                  w-5 h-5 rounded-full border-2 mr-3 items-center justify-center
-                  ${selectedPlan === 'monthly' ? 'border-pink-500 bg-pink-500' : 'border-gray-300'}
-                `}>
-                  {selectedPlan === 'monthly' && (
-                    <Ionicons name="checkmark" size={14} color="white" />
-                  )}
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center">
+                  <View
+                    className={`w-5 h-5 rounded-full border-2 mr-3 items-center justify-center ${
+                      selectedPlan === "yearly"
+                        ? "border-pink-500 bg-pink-500"
+                        : "border-gray-300"
+                    }`}
+                  >
+                    {selectedPlan === "yearly" && (
+                      <Ionicons name="checkmark" size={12} color="white" />
+                    )}
+                  </View>
+                  <View>
+                    <Text className="font-semibold text-gray-800">Annuel</Text>
+                    <Text className="text-gray-500 text-xs">
+                      {PRICING.YEARLY.monthlyEquivalentFormatted}
+                    </Text>
+                  </View>
                 </View>
-                <Text className="font-semibold text-gray-800">Mensuel</Text>
-              </View>
-              <View className="items-end">
                 <Text className="text-lg font-bold text-gray-800">
-                  {PRICING.monthly.price}
+                  {PRICING.YEARLY.priceFormatted}
                 </Text>
-                <Text className="text-gray-500 text-xs">par mois</Text>
               </View>
-            </View>
-          </TouchableOpacity>
-        </View>
+            </TouchableOpacity>
+
+            {/* Plan mensuel */}
+            <TouchableOpacity
+              onPress={() => setSelectedPlan("monthly")}
+              className={`p-4 rounded-xl border-2 ${
+                selectedPlan === "monthly"
+                  ? "border-pink-500 bg-pink-50"
+                  : "border-gray-200 bg-white"
+              }`}
+            >
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center">
+                  <View
+                    className={`w-5 h-5 rounded-full border-2 mr-3 items-center justify-center ${
+                      selectedPlan === "monthly"
+                        ? "border-pink-500 bg-pink-500"
+                        : "border-gray-300"
+                    }`}
+                  >
+                    {selectedPlan === "monthly" && (
+                      <Ionicons name="checkmark" size={12} color="white" />
+                    )}
+                  </View>
+                  <Text className="font-semibold text-gray-800">Mensuel</Text>
+                </View>
+                <Text className="text-lg font-bold text-gray-800">
+                  {PRICING.MONTHLY.priceFormatted}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Message d'erreur */}
         {error && (
-          <View className="mx-4 mb-4 p-3 bg-red-50 rounded-lg">
+          <View className="mx-4 mt-3 p-3 bg-red-50 rounded-lg">
             <Text className="text-red-600 text-center text-sm">{error}</Text>
           </View>
         )}
 
-        {/* Bouton d'achat */}
-        <View className="px-4 pb-6">
+        {/* Boutons */}
+        <View className="px-4 pt-4 pb-6">
+          {/* Bouton principal */}
           <TouchableOpacity
             onPress={handlePurchase}
             disabled={isLoading}
-            className={`
-              py-4 rounded-xl items-center
-              ${isLoading ? 'bg-gray-300' : 'bg-pink-500 active:bg-pink-600'}
-            `}
+            className={`py-4 rounded-xl items-center ${
+              isLoading ? "bg-gray-300" : "bg-pink-500 active:bg-pink-600"
+            }`}
           >
             {isLoading ? (
               <ActivityIndicator color="white" />
             ) : (
               <Text className="text-white font-bold text-lg">
-                S'abonner maintenant
+                {onPurchase ? "Débloquer avec Premium" : "Voir les offres"}
               </Text>
             )}
           </TouchableOpacity>
 
-          {/* Infos légales */}
-          <Text className="text-gray-400 text-xs text-center mt-3">
-            Paiement via Google Play. Annulable à tout moment.{'\n'}
-            L'abonnement se renouvelle automatiquement.
-          </Text>
+          {/* Bouton secondaire si pas de onPurchase */}
+          {!onPurchase && (
+            <TouchableOpacity
+              onPress={onClose}
+              className="py-3 mt-2"
+            >
+              <Text className="text-gray-500 text-center">Plus tard</Text>
+            </TouchableOpacity>
+          )}
 
-          {/* Lien restaurer achats */}
-          <TouchableOpacity className="mt-3">
-            <Text className="text-pink-500 text-sm text-center">
-              Restaurer mes achats
+          {/* Infos légales si achat direct */}
+          {onPurchase && (
+            <Text className="text-gray-400 text-xs text-center mt-3">
+              Paiement via Google Play. Annulable à tout moment.
             </Text>
-          </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </Modal>
   );
 };
+
+// ============================================================
+// EXPORT
+// ============================================================
 
 export default PaywallModal;
