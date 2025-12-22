@@ -68,8 +68,11 @@ export default function PremiumScreen() {
   const [error, setError] = useState<string | null>(null);
 
   // Stores
-  const { user } = useAuthStore();
+  const { userData, firebaseUser } = useAuthStore();
   const { isPremium, loadSubscriptionStatus } = useSubscriptionStore();
+
+  // ID utilisateur (préférer firebaseUser.uid car c'est l'ID auth)
+  const userId = firebaseUser?.uid || userData?.id;
 
   // ----------------------------------------------------------
   // CHARGEMENT DES PRODUITS
@@ -111,7 +114,7 @@ export default function PremiumScreen() {
   // ----------------------------------------------------------
 
   const handlePurchase = async () => {
-    if (!user?.id) {
+    if (!userId) {
       Alert.alert("Erreur", "Vous devez être connecté pour vous abonner");
       return;
     }
@@ -124,11 +127,11 @@ export default function PremiumScreen() {
     setError(null);
 
     try {
-      const result = await iapService.purchaseSubscription(productId, user.id);
+      const result = await iapService.purchaseSubscription(productId, userId);
 
       if (result.success && result.data?.success) {
         // Rafraîchir le statut
-        await loadSubscriptionStatus(user.id);
+        await loadSubscriptionStatus(userId);
 
         Alert.alert(
           "Bienvenue ! 🎉",
@@ -152,7 +155,7 @@ export default function PremiumScreen() {
   // ----------------------------------------------------------
 
   const handleRestore = async () => {
-    if (!user?.id) {
+    if (!userId) {
       Alert.alert("Erreur", "Vous devez être connecté");
       return;
     }
@@ -161,10 +164,10 @@ export default function PremiumScreen() {
     setError(null);
 
     try {
-      const result = await iapService.restorePurchases(user.id);
+      const result = await iapService.restorePurchases(userId);
 
       if (result.success && result.data?.restored) {
-        await loadSubscriptionStatus(user.id);
+        await loadSubscriptionStatus(userId);
 
         Alert.alert(
           "Achats restaurés ! ✅",

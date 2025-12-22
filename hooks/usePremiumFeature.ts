@@ -73,9 +73,12 @@ export function usePremiumFeature(
   const { sessionCode, onPaywallShow, onPaywallClose } = options;
 
   // Stores
-  const { user } = useAuthStore();
+  const { firebaseUser, userData } = useAuthStore();
   const { isPremium, accessibleFeatures, checkFeatureAccess } =
     useSubscriptionStore();
+
+  // ID utilisateur (préférer firebaseUser.uid car c'est l'ID auth)
+  const userId = firebaseUser?.uid || userData?.id;
 
   // State local
   const [isChecking, setIsChecking] = useState(false);
@@ -95,7 +98,7 @@ export function usePremiumFeature(
   const checkFeature = useCallback(
     async (feature: PremiumFeature): Promise<FeatureCheckResult> => {
       // Si pas d'utilisateur, bloquer
-      if (!user?.id) {
+      if (!userId) {
         return {
           allowed: false,
           showPaywall: true,
@@ -108,7 +111,7 @@ export function usePremiumFeature(
 
       try {
         // Utiliser le store pour la vérification
-        const allowed = await checkFeatureAccess(user.id, feature, sessionCode);
+        const allowed = await checkFeatureAccess(userId, feature, sessionCode);
 
         const result: FeatureCheckResult = {
           allowed,
@@ -134,7 +137,7 @@ export function usePremiumFeature(
         setIsChecking(false);
       }
     },
-    [user?.id, sessionCode, checkFeatureAccess]
+    [userId, sessionCode, checkFeatureAccess]
   );
 
   // ----------------------------------------------------------
@@ -148,7 +151,7 @@ export function usePremiumFeature(
   const checkFeatureSync = useCallback(
     (feature: PremiumFeature): FeatureCheckResult => {
       // Si pas d'utilisateur, bloquer
-      if (!user?.id) {
+      if (!userId) {
         return {
           allowed: false,
           showPaywall: true,
@@ -200,7 +203,7 @@ export function usePremiumFeature(
         loading: false,
       };
     },
-    [user?.id, isPremium, accessibleFeatures]
+    [userId, isPremium, accessibleFeatures]
   );
 
   // ----------------------------------------------------------
@@ -275,13 +278,16 @@ export function useFeatureAccess(
   reason?: string;
   check: () => Promise<boolean>;
 } {
-  const { user } = useAuthStore();
+  const { firebaseUser, userData } = useAuthStore();
   const { isPremium, accessibleFeatures, checkFeatureAccess } =
     useSubscriptionStore();
 
+  // ID utilisateur
+  const userId = firebaseUser?.uid || userData?.id;
+
   // Vérification synchrone rapide
   const syncResult = useMemo(() => {
-    if (!user?.id) {
+    if (!userId) {
       return { allowed: false, showPaywall: true, reason: "Non connecté" };
     }
 
@@ -300,13 +306,13 @@ export function useFeatureAccess(
       showPaywall: true,
       reason: config?.description,
     };
-  }, [user?.id, isPremium, accessibleFeatures, feature]);
+  }, [userId, isPremium, accessibleFeatures, feature]);
 
   // Vérification async
   const check = useCallback(async (): Promise<boolean> => {
-    if (!user?.id) return false;
-    return checkFeatureAccess(user.id, feature, sessionCode);
-  }, [user?.id, feature, sessionCode, checkFeatureAccess]);
+    if (!userId) return false;
+    return checkFeatureAccess(userId, feature, sessionCode);
+  }, [userId, feature, sessionCode, checkFeatureAccess]);
 
   return {
     ...syncResult,
@@ -328,8 +334,11 @@ export function useFeatureAccess(
 export function useMultipleFeatures(
   features: PremiumFeature[]
 ): Record<PremiumFeature, { allowed: boolean; showPaywall: boolean }> {
-  const { user } = useAuthStore();
+  const { firebaseUser, userData } = useAuthStore();
   const { isPremium, accessibleFeatures } = useSubscriptionStore();
+
+  // ID utilisateur
+  const userId = firebaseUser?.uid || userData?.id;
 
   return useMemo(() => {
     const result: Record<
@@ -338,7 +347,7 @@ export function useMultipleFeatures(
     > = {} as any;
 
     for (const feature of features) {
-      if (!user?.id) {
+      if (!userId) {
         result[feature] = { allowed: false, showPaywall: true };
         continue;
       }
@@ -358,7 +367,7 @@ export function useMultipleFeatures(
     }
 
     return result;
-  }, [user?.id, isPremium, accessibleFeatures, features]);
+  }, [userId, isPremium, accessibleFeatures, features]);
 }
 
 // ============================================================

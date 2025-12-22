@@ -13,7 +13,7 @@
  * Installation: npm install react-native-iap
  */
 
-import { Platform, Alert } from "react-native";
+import { Platform } from "react-native";
 import { PRICING } from "../utils/constants";
 import { PremiumPlan, ApiResponse } from "../types";
 import {
@@ -67,7 +67,10 @@ export const PRODUCT_IDS = {
 } as const;
 
 /** Liste des IDs de produits d'abonnement */
-export const SUBSCRIPTION_SKUS = [PRODUCT_IDS.MONTHLY, PRODUCT_IDS.YEARLY];
+export const SUBSCRIPTION_SKUS: readonly string[] = [
+  PRODUCT_IDS.MONTHLY,
+  PRODUCT_IDS.YEARLY,
+];
 
 // ============================================================
 // SERVICE IAP
