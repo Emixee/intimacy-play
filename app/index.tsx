@@ -2,7 +2,7 @@
  * Point d'entrée de l'application
  *
  * Redirige vers :
- * - (auth)/login si non connecté
+ * - (auth)/welcome si non connecté
  * - (main) si connecté
  */
 
@@ -24,7 +24,8 @@ export default function Index() {
       if (firebaseUser) {
         router.replace("/(main)");
       } else {
-        router.replace("/(auth)/login");
+        // Rediriger vers welcome au lieu de login
+        router.replace("/(auth)/welcome");
       }
     }, 100);
 
