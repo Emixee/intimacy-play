@@ -16,6 +16,7 @@ module.exports = {
     ecmaVersion: 2022,
   },
   ignorePatterns: [
+    ".eslintrc.js",
     "/lib/**/*",
     "/generated/**/*",
     "node_modules/**/*",
