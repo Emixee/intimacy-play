@@ -8,9 +8,11 @@
  * Affiche un résumé avant création.
  *
  * GAME-MECHANICS:
- * - Gratuit : niveaux 1-2, max 15 défis
+ * - Gratuit : niveaux 1-3, max 15 défis
  * - Premium : niveaux 1-4, max 50 défis
  * - TODO: Pub interstitielle pour utilisateurs gratuits avant création
+ * 
+ * MISE À JOUR: Utilise maintenant utils/challengeSelector.ts
  */
 
 import React, { useState, useMemo } from "react";
@@ -29,7 +31,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Button, Card } from "../../components/ui";
 import { useAuth } from "../../hooks/useAuth";
 import { sessionService } from "../../services/session.service";
-import { selectChallenges } from "../../data/challenges";
+import { selectChallenges, SelectionConfig } from "../../utils/challengeSelector";
 import {
   IntensityLevel,
   INTENSITY_LEVELS,
@@ -42,7 +44,7 @@ import {
 
 /** Options de nombre de défis selon le statut premium */
 const CHALLENGE_COUNT_OPTIONS = {
-  free: [5, 10, ],
+  free: [5, 10, 15],
   premium: [5, 10, 15, 20, 30, 40, 50],
 };
 
@@ -387,20 +389,39 @@ export default function CreateSessionScreen() {
       //   await showInterstitialAd();
       // }
 
-      // Générer les défis
-      // Note: On utilise le genre opposé par défaut car on ne connaît pas encore le partenaire
-      // Les défis pour le partenaire seront du bon genre car selectChallenges prend les deux genres
+      // Genre du partenaire (par défaut opposé, sera mis à jour quand il rejoint)
       const partnerGender = userData.gender === "homme" ? "femme" : "homme";
 
-      const challenges = selectChallenges(
-        userData.gender,
-        partnerGender,
-        selectedChallengeCount,
-        selectedIntensity,
-        isPremium
-      );
+      // Configuration pour le nouvel algorithme de sélection
+      const selectionConfig: SelectionConfig = {
+        creatorGender: userData.gender,
+        partnerGender: partnerGender,
+        count: selectedChallengeCount,
+        startIntensity: selectedIntensity,
+        isPremium: isPremium,
+        // Options par défaut (à personnaliser plus tard dans l'UI)
+        selectedThemes: [], // Vide = tous les thèmes
+        includeToys: false, // Pas de jouets par défaut
+        availableToys: [],
+        mediaPreferences: {
+          photo: true,
+          audio: true,
+          video: true,
+        },
+      };
 
-      // Créer la session
+      // Générer les défis avec le nouvel algorithme
+      const selectionResult = selectChallenges(selectionConfig);
+
+      // Log des avertissements s'il y en a
+      if (selectionResult.warnings.length > 0) {
+        console.warn("[CreateSession] Warnings:", selectionResult.warnings);
+      }
+
+      // Log des statistiques
+      console.log("[CreateSession] Stats:", selectionResult.stats);
+
+      // Créer la session avec les défis sélectionnés
       const result = await sessionService.createSession(
         userData.id,
         userData.gender,
@@ -408,7 +429,7 @@ export default function CreateSessionScreen() {
           challengeCount: selectedChallengeCount,
           startIntensity: selectedIntensity,
         },
-        challenges
+        selectionResult.challenges
       );
 
       if (result.success && result.data) {
