@@ -7,6 +7,8 @@
  * - Card "Nouvelle partie" avec actions
  * - Section "Comment ça marche"
  * - Banner Premium (si non premium)
+ * 
+ * PROMPT 7.3 : Ajout bouton de test publicités (Dev only)
  */
 
 import React from "react";
@@ -221,6 +223,44 @@ function PremiumBanner() {
   );
 }
 
+/**
+ * PROMPT 7.3 : Section Dev Tools (mode développement uniquement)
+ */
+function DevToolsSection({ onLogout }: { onLogout: () => void }) {
+  return (
+    <View className="mx-4 mt-6 mb-4 p-4 bg-gray-100 rounded-2xl border-2 border-dashed border-gray-300">
+      <View className="flex-row items-center mb-3">
+        <Ionicons name="construct-outline" size={20} color="#6B7280" />
+        <Text className="text-gray-600 font-bold ml-2">
+          🛠️ Outils Développeur
+        </Text>
+      </View>
+      
+      {/* Bouton Test Pubs */}
+      <TouchableOpacity
+        onPress={() => router.push("/(main)/test-ads")}
+        className="bg-orange-500 py-3 px-4 rounded-xl flex-row items-center justify-center mb-2"
+      >
+        <Ionicons name="megaphone-outline" size={20} color="#FFF" />
+        <Text className="text-white font-semibold ml-2">
+          🧪 Test Publicités AdMob
+        </Text>
+      </TouchableOpacity>
+      
+      {/* Bouton Déconnexion */}
+      <TouchableOpacity
+        onPress={onLogout}
+        className="bg-gray-400 py-2 px-4 rounded-xl flex-row items-center justify-center"
+      >
+        <Ionicons name="log-out-outline" size={18} color="#FFF" />
+        <Text className="text-white font-medium ml-2 text-sm">
+          Se déconnecter
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // ============================================================
 // ÉCRAN PRINCIPAL
 // ============================================================
@@ -271,15 +311,8 @@ export default function HomeScreen() {
         {/* ========== PREMIUM BANNER ========== */}
         {!isPremium && <PremiumBanner />}
 
-        {/* ========== DÉCONNEXION (Dev only) ========== */}
-        {__DEV__ && (
-          <TouchableOpacity
-            onPress={logout}
-            className="mt-6 items-center py-2"
-          >
-            <Text className="text-gray-400 text-sm">Se déconnecter (Dev)</Text>
-          </TouchableOpacity>
-        )}
+        {/* ========== DEV TOOLS (Dev only) - PROMPT 7.3 ========== */}
+        {__DEV__ && <DevToolsSection onLogout={logout} />}
       </ScrollView>
     </SafeAreaView>
   );
