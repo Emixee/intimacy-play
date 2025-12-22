@@ -28,6 +28,7 @@ import {
   CHALLENGES_N3_FEMME as RAW_N3_F,
   CHALLENGES_N4_HOMME as RAW_N4_H,
   CHALLENGES_N4_FEMME as RAW_N4_F,
+  ChallengeData,
 } from "./challenges";
 
 // ============================================================
@@ -54,13 +55,6 @@ export interface ExtendedChallengeTemplate {
   hasToy: boolean;
   /** Nom du jouet si applicable */
   toyName: string | null;
-}
-
-/** Structure brute des défis existants */
-interface RawChallengeData {
-  text: string;
-  type: ChallengeType;
-  theme: string;
 }
 
 // ============================================================
@@ -118,7 +112,7 @@ function detectToy(text: string): { hasToy: boolean; toyName: string | null } {
  * Convertit un tableau de défis bruts en défis étendus
  */
 function convertChallenges(
-  rawChallenges: RawChallengeData[],
+  rawChallenges: ChallengeData[],
   level: IntensityLevel,
   gender: Gender
 ): ExtendedChallengeTemplate[] {
@@ -311,28 +305,6 @@ export function getChallengeStats(): {
 }
 
 /**
- * Vérifie si un niveau est accessible
- */
-export function isLevelAccessible(
-  level: IntensityLevel,
-  isPremium: boolean
-): boolean {
-  // Niveaux 1-3 gratuits, niveau 4 premium
-  if (level <= 3) return true;
-  return isPremium;
-}
-
-/**
- * Retourne les niveaux accessibles pour un utilisateur
- */
-export function getAccessibleLevels(isPremium: boolean): IntensityLevel[] {
-  if (isPremium) {
-    return [1, 2, 3, 4];
-  }
-  return [1, 2, 3];
-}
-
-/**
  * Retourne le nombre total de défis disponibles par niveau
  */
 export function getChallengeCountByLevel(level: IntensityLevel): number {
@@ -380,8 +352,6 @@ export default {
   getChallengesWithToy,
   getChallengesWithoutToy,
   getChallengeStats,
-  isLevelAccessible,
-  getAccessibleLevels,
   getChallengeCountByLevel,
   getAllThemes,
   getAllToys,

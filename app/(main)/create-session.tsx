@@ -3,16 +3,16 @@
  *
  * Permet de configurer :
  * - Niveau d'intensité de départ (1-4)
- * - Nombre de défis (5-50)
+ * - Nombre de défis PAR JOUEUR (5-50)
  *
- * Affiche un résumé avant création.
+ * MODIFICATION :
+ * - Le nombre de défis sélectionné = défis PAR JOUEUR
+ * - Total de défis = count * 2 (un pour chaque joueur)
+ * - Durée estimée basée sur le total réel
  *
  * GAME-MECHANICS:
- * - Gratuit : niveaux 1-3, max 15 défis
- * - Premium : niveaux 1-4, max 50 défis
- * - TODO: Pub interstitielle pour utilisateurs gratuits avant création
- * 
- * MISE À JOUR: Utilise maintenant utils/challengeSelector.ts
+ * - Gratuit : niveaux 1-2, max 10 défis par joueur
+ * - Premium : niveaux 1-4, max 50 défis par joueur
  */
 
 import React, { useState, useMemo } from "react";
@@ -31,7 +31,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Button, Card } from "../../components/ui";
 import { useAuth } from "../../hooks/useAuth";
 import { sessionService } from "../../services/session.service";
-import { selectChallenges, SelectionConfig } from "../../utils/challengeSelector";
+import { selectChallenges } from "../../data/challenges";
 import {
   IntensityLevel,
   INTENSITY_LEVELS,
@@ -42,10 +42,10 @@ import {
 // CONSTANTES
 // ============================================================
 
-/** Options de nombre de défis selon le statut premium */
+/** Options de nombre de défis PAR JOUEUR selon le statut premium */
 const CHALLENGE_COUNT_OPTIONS = {
-  free: [5, 10, 15],
-  premium: [5, 10, 15, 20, 30, 40, 50],
+  free: [5, 10],
+  premium: [5, 10, 15, 20, 25, 30],
 };
 
 /** Minutes estimées par défi */
@@ -125,121 +125,102 @@ function IntensityOption({
         ${isLocked ? "opacity-60" : ""}
       `}
     >
-      {/* Emoji / Lock */}
-      <View
-        className={`
-          w-12 h-12 rounded-full items-center justify-center mr-4
-          ${isLocked ? "bg-gray-200" : colors.bg}
-        `}
-      >
-        {isLocked ? (
-          <Ionicons name="lock-closed" size={20} color="#9CA3AF" />
-        ) : (
-          <Text className="text-2xl">{emoji}</Text>
-        )}
+      {/* Emoji */}
+      <View className="w-12 h-12 rounded-full bg-white items-center justify-center mr-3">
+        <Text className="text-2xl">{emoji}</Text>
       </View>
 
       {/* Texte */}
       <View className="flex-1">
         <View className="flex-row items-center">
-          <Text
-            className={`
-              text-lg font-semibold
-              ${isLocked ? "text-gray-400" : isSelected ? colors.text : "text-gray-800"}
-            `}
-          >
+          <Text className={`text-lg font-semibold ${isSelected ? colors.text : "text-gray-800"}`}>
             {name}
           </Text>
           {isPremiumLevel && (
-            <View className="ml-2 bg-amber-100 px-2 py-0.5 rounded-full flex-row items-center">
-              <Text className="text-amber-600 text-xs font-medium">
-                {isLocked ? "🔒" : "👑"} Premium
-              </Text>
+            <View className="ml-2 bg-amber-100 px-2 py-0.5 rounded-full">
+              <Text className="text-amber-600 text-xs font-medium">👑 Premium</Text>
             </View>
           )}
         </View>
-        <Text
-          className={`text-sm ${isLocked ? "text-gray-400" : "text-gray-500"}`}
-        >
-          {description}
-        </Text>
+        <Text className="text-gray-500 text-sm mt-0.5">{description}</Text>
       </View>
 
-      {/* Indicateur de sélection */}
-      {isSelected && !isLocked && (
-        <Ionicons name="checkmark-circle" size={24} color={colors.icon} />
-      )}
-    </Pressable>
-  );
-}
-
-interface ChallengeCountOptionProps {
-  count: number;
-  isSelected: boolean;
-  isPremiumOption: boolean;
-  isLocked: boolean;
-  onSelect: () => void;
-}
-
-/**
- * Option de nombre de défis
- */
-function ChallengeCountOption({
-  count,
-  isSelected,
-  isPremiumOption,
-  isLocked,
-  onSelect,
-}: ChallengeCountOptionProps) {
-  return (
-    <Pressable
-      onPress={isLocked ? undefined : onSelect}
-      className={`
-        px-5 py-3 rounded-xl mr-3 border-2 relative
-        ${isSelected ? "bg-pink-500 border-pink-500" : "bg-white border-gray-200"}
-        ${isLocked ? "opacity-60" : ""}
-      `}
-    >
-      <Text
-        className={`
-          text-lg font-bold
-          ${isSelected ? "text-white" : isLocked ? "text-gray-400" : "text-gray-700"}
-        `}
-      >
-        {count}
-      </Text>
-      {isPremiumOption && isLocked && (
-        <View className="absolute -top-1 -right-1">
-          <Ionicons name="lock-closed" size={12} color="#9CA3AF" />
+      {/* Indicateur sélection ou lock */}
+      {isLocked ? (
+        <Ionicons name="lock-closed" size={20} color="#9CA3AF" />
+      ) : isSelected ? (
+        <View className={`w-6 h-6 rounded-full items-center justify-center ${colors.bg}`}>
+          <Ionicons name="checkmark" size={16} color={colors.icon} />
         </View>
-      )}
+      ) : null}
     </Pressable>
   );
 }
 
-interface RulesInfoProps {
+/**
+ * Sélecteur de nombre de défis PAR JOUEUR
+ */
+function ChallengeCountSelector({
+  counts,
+  selected,
+  maxFree,
+  isPremium,
+  onSelect,
+}: {
+  counts: number[];
+  selected: number;
+  maxFree: number;
   isPremium: boolean;
+  onSelect: (count: number) => void;
+}) {
+  return (
+    <View className="flex-row flex-wrap">
+      {counts.map((count) => {
+        const isSelected = count === selected;
+        const isLocked = count > maxFree && !isPremium;
+
+        return (
+          <Pressable
+            key={count}
+            onPress={() => !isLocked && onSelect(count)}
+            className={`
+              min-w-[60px] px-4 py-3 rounded-xl mr-2 mb-2 items-center
+              ${isSelected ? "bg-pink-500" : isLocked ? "bg-gray-100" : "bg-white"}
+              ${isLocked ? "opacity-60" : ""}
+            `}
+          >
+            <Text
+              className={`font-semibold ${isSelected ? "text-white" : isLocked ? "text-gray-400" : "text-gray-800"}`}
+            >
+              {count}
+            </Text>
+            {isLocked && (
+              <Ionicons name="lock-closed" size={12} color="#9CA3AF" style={{ marginTop: 2 }} />
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
 /**
- * Section d'information sur les règles
+ * Carte d'info sur les règles
  */
-function RulesInfo({ isPremium }: RulesInfoProps) {
+function RulesInfo({ isPremium }: { isPremium: boolean }) {
   return (
-    <Card className="mb-6 bg-blue-50 border-blue-200">
-      <Card.Content className="py-4">
+    <Card className="mb-6">
+      <Card.Content>
         <View className="flex-row items-start">
-          <Ionicons
-            name="information-circle"
-            size={24}
-            color="#3B82F6"
-            style={{ marginRight: 12, marginTop: 2 }}
-          />
+          <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
+            <Ionicons name="information-circle" size={24} color="#3B82F6" />
+          </View>
           <View className="flex-1">
             <Text className="text-blue-800 font-semibold mb-1">
               Comment ça marche ?
             </Text>
             <Text className="text-blue-700 text-sm leading-5">
+              • Chaque joueur a le même nombre de défis{"\n"}
               • Les défis alternent entre vous et votre partenaire{"\n"}
               • Chacun réalise son défi et envoie une preuve{"\n"}
               • L'autre valide après avoir reçu la preuve{"\n"}
@@ -277,13 +258,22 @@ export default function CreateSessionScreen() {
   // ----------------------------------------------------------
 
   /** Options de défis disponibles (premium = plus d'options) */
-  const availableCounts = CHALLENGE_COUNT_OPTIONS.premium; // Afficher toutes les options
+  const availableCounts = CHALLENGE_COUNT_OPTIONS.premium;
   const maxFreeCount = Math.max(...CHALLENGE_COUNT_OPTIONS.free);
 
-  /** Durée estimée en minutes */
+  /** 
+   * Total de défis dans la partie 
+   * = défis par joueur × 2
+   */
+  const totalChallenges = selectedChallengeCount * 2;
+
+  /** 
+   * Durée estimée en minutes 
+   * Basée sur le TOTAL de défis (count * 2)
+   */
   const estimatedDuration = useMemo(() => {
-    return selectedChallengeCount * MINUTES_PER_CHALLENGE;
-  }, [selectedChallengeCount]);
+    return totalChallenges * MINUTES_PER_CHALLENGE;
+  }, [totalChallenges]);
 
   /** Formatage de la durée */
   const formattedDuration = useMemo(() => {
@@ -342,14 +332,14 @@ export default function CreateSessionScreen() {
   };
 
   /**
-   * Sélectionne un nombre de défis
+   * Sélectionne un nombre de défis PAR JOUEUR
    */
   const handleSelectChallengeCount = (count: number) => {
     // Si le count est premium et l'utilisateur non premium
     if (count > maxFreeCount && !isPremium) {
       Alert.alert(
         "Option Premium 👑",
-        `Les parties de plus de ${maxFreeCount} défis sont réservées aux membres Premium.`,
+        `Les parties de plus de ${maxFreeCount} défis par joueur sont réservées aux membres Premium.`,
         [
           { text: "Annuler", style: "cancel" },
           {
@@ -384,52 +374,29 @@ export default function CreateSessionScreen() {
     setIsCreating(true);
 
     try {
-      // TODO: Afficher une pub interstitielle pour les utilisateurs gratuits
-      // if (!isPremium) {
-      //   await showInterstitialAd();
-      // }
-
-      // Genre du partenaire (par défaut opposé, sera mis à jour quand il rejoint)
+      // Générer les défis
+      // selectChallenges génère maintenant count défis PAR JOUEUR
+      // Donc le tableau retourné aura count * 2 défis au total
       const partnerGender = userData.gender === "homme" ? "femme" : "homme";
 
-      // Configuration pour le nouvel algorithme de sélection
-      const selectionConfig: SelectionConfig = {
-        creatorGender: userData.gender,
-        partnerGender: partnerGender,
-        count: selectedChallengeCount,
-        startIntensity: selectedIntensity,
-        isPremium: isPremium,
-        // Options par défaut (à personnaliser plus tard dans l'UI)
-        selectedThemes: [], // Vide = tous les thèmes
-        includeToys: false, // Pas de jouets par défaut
-        availableToys: [],
-        mediaPreferences: {
-          photo: true,
-          audio: true,
-          video: true,
-        },
-      };
+      const challenges = selectChallenges(
+        userData.gender,
+        partnerGender,
+        selectedChallengeCount, // Défis PAR JOUEUR
+        selectedIntensity,
+        isPremium
+      );
 
-      // Générer les défis avec le nouvel algorithme
-      const selectionResult = selectChallenges(selectionConfig);
-
-      // Log des avertissements s'il y en a
-      if (selectionResult.warnings.length > 0) {
-        console.warn("[CreateSession] Warnings:", selectionResult.warnings);
-      }
-
-      // Log des statistiques
-      console.log("[CreateSession] Stats:", selectionResult.stats);
-
-      // Créer la session avec les défis sélectionnés
+      // Créer la session avec le TOTAL de défis
       const result = await sessionService.createSession(
         userData.id,
         userData.gender,
         {
-          challengeCount: selectedChallengeCount,
+          challengeCount: challenges.length, // Total réel (count * 2)
           startIntensity: selectedIntensity,
         },
-        selectionResult.challenges
+        challenges,
+        isPremium
       );
 
       if (result.success && result.data) {
@@ -503,108 +470,80 @@ export default function CreateSessionScreen() {
 
         {/* Section Nombre de défis */}
         <View className="mb-6">
-          <Text className="text-lg font-semibold text-gray-800 mb-3">
-            🎯 Nombre de défis
+          <Text className="text-lg font-semibold text-gray-800 mb-1">
+            🎯 Défis par joueur
           </Text>
           <Text className="text-gray-500 mb-4">
-            {isPremium
-              ? "Choisissez jusqu'à 50 défis par partie."
-              : `Jusqu'à ${maxFreeCount} défis en version gratuite.`}
+            Chaque joueur aura ce nombre de défis à réaliser.
           </Text>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerClassName="pb-2"
-          >
-            {availableCounts.map((count) => {
-              const isPremiumOption = count > maxFreeCount;
-              const isLocked = isPremiumOption && !isPremium;
-
-              return (
-                <ChallengeCountOption
-                  key={count}
-                  count={count}
-                  isSelected={selectedChallengeCount === count}
-                  isPremiumOption={isPremiumOption}
-                  isLocked={isLocked}
-                  onSelect={() => handleSelectChallengeCount(count)}
-                />
-              );
-            })}
-          </ScrollView>
-
-          {!isPremium && (
-            <Pressable
-              onPress={() => router.push("/premium")}
-              className="flex-row items-center mt-3"
-            >
-              <Text className="text-pink-500 text-sm">
-                👑 Débloquer plus de défis avec Premium
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color="#EC4899" />
-            </Pressable>
-          )}
+          <ChallengeCountSelector
+            counts={availableCounts}
+            selected={selectedChallengeCount}
+            maxFree={maxFreeCount}
+            isPremium={isPremium}
+            onSelect={handleSelectChallengeCount}
+          />
         </View>
 
         {/* Résumé */}
         <Card className="mb-6">
-          <Card.Header>
-            <Text className="text-lg font-semibold text-gray-800">
-              📋 Résumé de la partie
-            </Text>
-          </Card.Header>
           <Card.Content>
-            {/* Défis */}
-            <View className="flex-row justify-between items-center py-3 border-b border-gray-100">
-              <Text className="text-gray-600">Nombre de défis</Text>
-              <Text className="font-semibold text-gray-800">
-                {selectedChallengeCount} ({Math.ceil(selectedChallengeCount / 2)} chacun)
-              </Text>
-            </View>
+            <Text className="text-lg font-semibold text-gray-800 mb-3">
+              📋 Résumé
+            </Text>
 
-            {/* Intensité */}
-            <View className="flex-row justify-between items-center py-3 border-b border-gray-100">
-              <Text className="text-gray-600">Intensité de départ</Text>
-              <View className="flex-row items-center">
-                <Text className="mr-1">{selectedLevelInfo?.emoji}</Text>
-                <Text className="font-semibold text-gray-800">
-                  {selectedLevelInfo?.name}
+            <View className="space-y-2">
+              <View className="flex-row justify-between py-2 border-b border-gray-100">
+                <Text className="text-gray-600">Défis par joueur</Text>
+                <Text className="font-medium text-gray-800">
+                  {selectedChallengeCount} chacun
                 </Text>
               </View>
-            </View>
 
-            {/* Changements */}
-            <View className="flex-row justify-between items-center py-3 border-b border-gray-100">
-              <Text className="text-gray-600">Changements de défi</Text>
-              <Text className="font-semibold text-gray-800">
-                {MAX_CHALLENGE_CHANGES} par joueur
-              </Text>
-            </View>
+              <View className="flex-row justify-between py-2 border-b border-gray-100">
+                <Text className="text-gray-600">Total de défis</Text>
+                <Text className="font-medium text-pink-600">
+                  {totalChallenges} défis
+                </Text>
+              </View>
 
-            {/* Durée */}
-            <View className="flex-row justify-between items-center py-3">
-              <Text className="text-gray-600">Durée estimée</Text>
-              <Text className="font-semibold text-gray-800">
-                {formattedDuration}
-              </Text>
+              <View className="flex-row justify-between py-2 border-b border-gray-100">
+                <Text className="text-gray-600">Intensité de départ</Text>
+                <Text className="font-medium text-gray-800">
+                  {selectedLevelInfo?.emoji} {selectedLevelInfo?.name}
+                </Text>
+              </View>
+
+              <View className="flex-row justify-between py-2 border-b border-gray-100">
+                <Text className="text-gray-600">Changements de défi</Text>
+                <Text className="font-medium text-gray-800">
+                  {isPremium ? "Illimités 👑" : `${MAX_CHALLENGE_CHANGES} par joueur`}
+                </Text>
+              </View>
+
+              <View className="flex-row justify-between py-2">
+                <Text className="text-gray-600">Durée estimée</Text>
+                <Text className="font-medium text-gray-800">{formattedDuration}</Text>
+              </View>
             </View>
           </Card.Content>
         </Card>
 
-        {/* Message pour utilisateurs gratuits */}
+        {/* Info pub pour gratuits */}
         {!isPremium && (
-          <View className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
-            <View className="flex-row items-start">
-              <Text className="text-xl mr-2">💡</Text>
-              <View className="flex-1">
-                <Text className="text-amber-800 font-medium mb-1">
-                  Version gratuite
-                </Text>
-                <Text className="text-amber-700 text-sm">
-                  Une courte publicité sera affichée avant le début de la partie.
-                  Passez Premium pour une expérience sans pub !
-                </Text>
+          <View className="mb-6">
+            <View className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <View className="flex-row items-center">
+                <Ionicons name="megaphone-outline" size={24} color="#D97706" />
+                <View className="ml-3 flex-1">
+                  <Text className="text-amber-800 font-medium">
+                    Une publicité sera affichée
+                  </Text>
+                  <Text className="text-amber-600 text-sm mt-0.5">
+                    Passez Premium pour une expérience sans pub !
+                  </Text>
+                </View>
               </View>
             </View>
           </View>

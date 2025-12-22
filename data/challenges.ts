@@ -1,34 +1,29 @@
 /**
- * Données des défis pour Intimacy Play
+ * Données brutes des défis pour Intimacy Play
+ *
+ * Ce fichier contient UNIQUEMENT les données des défis.
+ * L'algorithme de sélection est dans utils/challengeSelector.ts
+ * L'enrichissement (id, hasToy) est dans data/challengesData.ts
  *
  * Structure :
  * - Défis séparés par niveau (1-4) et genre (homme/femme)
- * - Niveaux 1-2 : Gratuits
- * - Niveaux 3-4 : Premium
+ * - Niveaux 1-3 : Gratuits
+ * - Niveau 4 : Premium
  *
  * Total : 648 défis
  * - Niveau 1 : 86 (43 homme + 43 femme)
  * - Niveau 2 : 70 (35 homme + 35 femme)
  * - Niveau 3 : 163 (81 homme + 82 femme)
  * - Niveau 4 : 329 (161 homme + 168 femme)
- * 
- * FIX BUG COUPLES MÊME GENRE :
- * Ajout de forPlayer dans SessionChallenge pour gérer les tours par RÔLE
  */
 
-import {
-  Gender,
-  IntensityLevel,
-  ChallengeType,
-  SessionChallenge,
-  PlayerRole,
-} from "../types";
+import { ChallengeType } from "../types";
 
 // ============================================================
-// TYPES LOCAUX
+// TYPE LOCAL
 // ============================================================
 
-interface ChallengeData {
+export interface ChallengeData {
   text: string;
   type: ChallengeType;
   theme: string;
@@ -724,292 +719,3 @@ export const CHALLENGES_N4_FEMME: ChallengeData[] = [
   { text: "Incarne une infirmière qui l'examine intimement", type: "audio", theme: "Jeu de rôle" },
   { text: "Joue une cambrioleuse qui le surprend", type: "audio", theme: "Jeu de rôle" },
 ];
-
-
-// ============================================================
-// MAP DES DÉFIS PAR NIVEAU ET GENRE
-// ============================================================
-
-const CHALLENGES_MAP: Record<IntensityLevel, Record<Gender, ChallengeData[]>> = {
-  1: {
-    homme: CHALLENGES_N1_HOMME,
-    femme: CHALLENGES_N1_FEMME,
-  },
-  2: {
-    homme: CHALLENGES_N2_HOMME,
-    femme: CHALLENGES_N2_FEMME,
-  },
-  3: {
-    homme: CHALLENGES_N3_HOMME,
-    femme: CHALLENGES_N3_FEMME,
-  },
-  4: {
-    homme: CHALLENGES_N4_HOMME,
-    femme: CHALLENGES_N4_FEMME,
-  },
-};
-
-// ============================================================
-// FONCTIONS UTILITAIRES
-// ============================================================
-
-/**
- * Mélange un tableau de façon aléatoire (Fisher-Yates)
- */
-function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
-
-/**
- * Récupère des défis aléatoires pour un niveau et genre donné
- */
-function getRandomChallenges(
-  level: IntensityLevel,
-  gender: Gender,
-  count: number
-): ChallengeData[] {
-  const challenges = CHALLENGES_MAP[level][gender];
-  const shuffled = shuffleArray(challenges);
-  return shuffled.slice(0, Math.min(count, shuffled.length));
-}
-
-/**
- * Détermine le niveau maximum autorisé
- */
-function getMaxLevel(isPremium: boolean): IntensityLevel {
-  return isPremium ? 4 : 2;
-}
-
-/**
- * Calcule la distribution des défis par niveau
- * Commence au niveau de départ et progresse vers les niveaux supérieurs
- */
-function calculateLevelDistribution(
-  count: number,
-  startLevel: IntensityLevel,
-  maxLevel: IntensityLevel
-): Map<IntensityLevel, number> {
-  const distribution = new Map<IntensityLevel, number>();
-  const availableLevels = maxLevel - startLevel + 1;
-
-  if (availableLevels === 1) {
-    // Un seul niveau disponible
-    distribution.set(startLevel, count);
-  } else if (availableLevels === 2) {
-    // Deux niveaux : 60% premier, 40% second
-    const firstLevelCount = Math.ceil(count * 0.6);
-    distribution.set(startLevel, firstLevelCount);
-    distribution.set((startLevel + 1) as IntensityLevel, count - firstLevelCount);
-  } else if (availableLevels === 3) {
-    // Trois niveaux : 40% premier, 35% second, 25% troisième
-    const firstLevelCount = Math.ceil(count * 0.4);
-    const secondLevelCount = Math.ceil(count * 0.35);
-    distribution.set(startLevel, firstLevelCount);
-    distribution.set((startLevel + 1) as IntensityLevel, secondLevelCount);
-    distribution.set((startLevel + 2) as IntensityLevel, count - firstLevelCount - secondLevelCount);
-  } else {
-    // Quatre niveaux : 30% / 30% / 25% / 15%
-    const firstLevelCount = Math.ceil(count * 0.3);
-    const secondLevelCount = Math.ceil(count * 0.3);
-    const thirdLevelCount = Math.ceil(count * 0.25);
-    distribution.set(1, firstLevelCount);
-    distribution.set(2, secondLevelCount);
-    distribution.set(3, thirdLevelCount);
-    distribution.set(4, count - firstLevelCount - secondLevelCount - thirdLevelCount);
-  }
-
-  return distribution;
-}
-
-// ============================================================
-// FONCTION PRINCIPALE DE SÉLECTION (AVEC FIX forPlayer)
-// ============================================================
-
-/**
- * Sélectionne les défis pour une session de jeu
- *
- * FIX BUG COUPLES MÊME GENRE :
- * - forGender : détermine le TEXTE du défi (contenu genré)
- * - forPlayer : détermine QUI fait le défi ("creator" | "partner")
- * 
- * Avant le fix, la validation utilisait forGender, ce qui posait problème
- * pour les couples homme/homme ou femme/femme car les deux joueurs avaient
- * le même genre et ne pouvaient pas valider les défis de l'autre.
- *
- * @param creatorGender - Genre du créateur de la session
- * @param partnerGender - Genre du partenaire
- * @param count - Nombre total de défis à sélectionner
- * @param startLevel - Niveau d'intensité de départ (1-4)
- * @param isPremium - Si l'utilisateur a accès au contenu premium
- * @returns Array de SessionChallenge avec alternance créateur/partenaire
- */
-export function selectChallenges(
-  creatorGender: Gender,
-  partnerGender: Gender,
-  count: number,
-  startLevel: IntensityLevel,
-  isPremium: boolean
-): SessionChallenge[] {
-  const maxLevel = getMaxLevel(isPremium);
-  const effectiveStartLevel = Math.min(startLevel, maxLevel) as IntensityLevel;
-
-  // Calcul de la distribution par niveau
-  const distribution = calculateLevelDistribution(count, effectiveStartLevel, maxLevel);
-
-  // Collecter les défis pour chaque genre
-  const creatorChallenges: SessionChallenge[] = [];
-  const partnerChallenges: SessionChallenge[] = [];
-
-  // Nombre de défis par personne
-  const creatorCount = Math.ceil(count / 2);
-  const partnerCount = count - creatorCount;
-
-  // Répartir les niveaux entre créateur et partenaire
-  let creatorRemaining = creatorCount;
-  let partnerRemaining = partnerCount;
-
-  // Parcourir les niveaux dans l'ordre
-  const levels = Array.from(distribution.keys()).sort((a, b) => a - b);
-
-  for (const level of levels) {
-    const levelCount = distribution.get(level) || 0;
-    const creatorLevelCount = Math.ceil(levelCount / 2);
-    const partnerLevelCount = levelCount - creatorLevelCount;
-
-    // Défis pour le créateur (texte selon son genre, forPlayer = "creator")
-    const creatorLevelChallenges = getRandomChallenges(
-      level,
-      creatorGender,
-      Math.min(creatorLevelCount, creatorRemaining)
-    );
-
-    for (const challenge of creatorLevelChallenges) {
-      creatorChallenges.push({
-        text: challenge.text,
-        level,
-        type: challenge.type,
-        forGender: creatorGender,    // Pour le contenu textuel
-        forPlayer: "creator",         // FIX: Pour la validation des tours
-        completed: false,
-        completedBy: null,
-        completedAt: null,
-      });
-      creatorRemaining--;
-    }
-
-    // Défis pour le partenaire (texte selon son genre, forPlayer = "partner")
-    const partnerLevelChallenges = getRandomChallenges(
-      level,
-      partnerGender,
-      Math.min(partnerLevelCount, partnerRemaining)
-    );
-
-    for (const challenge of partnerLevelChallenges) {
-      partnerChallenges.push({
-        text: challenge.text,
-        level,
-        type: challenge.type,
-        forGender: partnerGender,    // Pour le contenu textuel
-        forPlayer: "partner",         // FIX: Pour la validation des tours
-        completed: false,
-        completedBy: null,
-        completedAt: null,
-      });
-      partnerRemaining--;
-    }
-  }
-
-  // Mélanger chaque liste
-  const shuffledCreator = shuffleArray(creatorChallenges);
-  const shuffledPartner = shuffleArray(partnerChallenges);
-
-  // Alterner les défis (créateur commence)
-  const result: SessionChallenge[] = [];
-  const maxLength = Math.max(shuffledCreator.length, shuffledPartner.length);
-
-  for (let i = 0; i < maxLength; i++) {
-    if (i < shuffledCreator.length) {
-      result.push(shuffledCreator[i]);
-    }
-    if (i < shuffledPartner.length) {
-      result.push(shuffledPartner[i]);
-    }
-  }
-
-  // Trier par niveau pour une progression naturelle
-  result.sort((a, b) => a.level - b.level);
-
-  return result;
-}
-
-// ============================================================
-// FONCTIONS D'EXPORT UTILITAIRES
-// ============================================================
-
-/**
- * Retourne le nombre total de défis disponibles par niveau
- */
-export function getChallengeCountByLevel(level: IntensityLevel): number {
-  return CHALLENGES_MAP[level].homme.length + CHALLENGES_MAP[level].femme.length;
-}
-
-/**
- * Vérifie si un niveau est accessible
- */
-export function isLevelAccessible(level: IntensityLevel, isPremium: boolean): boolean {
-  if (level <= 2) return true;
-  return isPremium;
-}
-
-/**
- * Retourne les niveaux accessibles pour un utilisateur
- */
-export function getAccessibleLevels(isPremium: boolean): IntensityLevel[] {
-  if (isPremium) {
-    return [1, 2, 3, 4];
-  }
-  return [1, 2];
-}
-
-/**
- * Retourne les statistiques des défis
- */
-export function getChallengeStats(): {
-  total: number;
-  byLevel: Record<IntensityLevel, { homme: number; femme: number; total: number }>;
-} {
-  return {
-    total: 648,
-    byLevel: {
-      1: { homme: CHALLENGES_N1_HOMME.length, femme: CHALLENGES_N1_FEMME.length, total: CHALLENGES_N1_HOMME.length + CHALLENGES_N1_FEMME.length },
-      2: { homme: CHALLENGES_N2_HOMME.length, femme: CHALLENGES_N2_FEMME.length, total: CHALLENGES_N2_HOMME.length + CHALLENGES_N2_FEMME.length },
-      3: { homme: CHALLENGES_N3_HOMME.length, femme: CHALLENGES_N3_FEMME.length, total: CHALLENGES_N3_HOMME.length + CHALLENGES_N3_FEMME.length },
-      4: { homme: CHALLENGES_N4_HOMME.length, femme: CHALLENGES_N4_FEMME.length, total: CHALLENGES_N4_HOMME.length + CHALLENGES_N4_FEMME.length },
-    },
-  };
-}
-
-// ============================================================
-// EXPORT PAR DÉFAUT
-// ============================================================
-
-export default {
-  selectChallenges,
-  getChallengeCountByLevel,
-  isLevelAccessible,
-  getAccessibleLevels,
-  getChallengeStats,
-  CHALLENGES_N1_HOMME,
-  CHALLENGES_N1_FEMME,
-  CHALLENGES_N2_HOMME,
-  CHALLENGES_N2_FEMME,
-  CHALLENGES_N3_HOMME,
-  CHALLENGES_N3_FEMME,
-  CHALLENGES_N4_HOMME,
-  CHALLENGES_N4_FEMME,
-};
