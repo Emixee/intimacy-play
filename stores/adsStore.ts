@@ -10,6 +10,7 @@
  */
 
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import { adsService, RewardedAdResult } from "../services/ads.service";
 import { gameService } from "../services/game.service";
 import { LIMITS } from "../utils/constants";
@@ -338,7 +339,7 @@ export const useAdsStore = create<AdsState>((set, get) => ({
 }));
 
 // ============================================================
-// SELECTORS
+// SELECTORS (fonctions pures qui retournent des primitives)
 // ============================================================
 
 /** Sélecteur pour le nombre de parties gratuites restantes */
@@ -364,43 +365,52 @@ export const selectIsShowingAd = (state: AdsState) => state.isShowingAd;
 export const selectAdsError = (state: AdsState) => state.error;
 
 // ============================================================
-// HOOKS UTILITAIRES
+// HOOKS UTILITAIRES (avec useShallow pour éviter les re-renders)
 // ============================================================
 
 /**
  * Hook pour obtenir l'état des parties gratuites
+ * Utilise useShallow pour éviter les re-renders infinis
  */
 export const useFreeGamesStatus = () => {
-  return useAdsStore((state) => ({
-    used: state.freeGamesToday,
-    remaining: MAX_FREE_GAMES_FROM_ADS - state.freeGamesToday,
-    max: MAX_FREE_GAMES_FROM_ADS,
-    canWatch: state.freeGamesToday < MAX_FREE_GAMES_FROM_ADS && !state.isShowingAd,
-  }));
+  return useAdsStore(
+    useShallow((state) => ({
+      used: state.freeGamesToday,
+      remaining: MAX_FREE_GAMES_FROM_ADS - state.freeGamesToday,
+      max: MAX_FREE_GAMES_FROM_ADS,
+      canWatch: state.freeGamesToday < MAX_FREE_GAMES_FROM_ADS && !state.isShowingAd,
+    }))
+  );
 };
 
 /**
  * Hook pour obtenir l'état des changements bonus
+ * Utilise useShallow pour éviter les re-renders infinis
  */
 export const useAdChangesStatus = () => {
-  return useAdsStore((state) => ({
-    used: state.adChangesThisSession,
-    remaining: MAX_AD_CHANGES_PER_SESSION - state.adChangesThisSession,
-    max: MAX_AD_CHANGES_PER_SESSION,
-    canWatch:
-      state.adChangesThisSession < MAX_AD_CHANGES_PER_SESSION && !state.isShowingAd,
-  }));
+  return useAdsStore(
+    useShallow((state) => ({
+      used: state.adChangesThisSession,
+      remaining: MAX_AD_CHANGES_PER_SESSION - state.adChangesThisSession,
+      max: MAX_AD_CHANGES_PER_SESSION,
+      canWatch:
+        state.adChangesThisSession < MAX_AD_CHANGES_PER_SESSION && !state.isShowingAd,
+    }))
+  );
 };
 
 /**
  * Hook pour savoir si les pubs sont prêtes
+ * Utilise useShallow pour éviter les re-renders infinis
  */
 export const useAdsReady = () => {
-  return useAdsStore((state) => ({
-    interstitial: state.interstitialReady,
-    rewarded: state.rewardedReady,
-    isInitializing: state.isInitializing,
-  }));
+  return useAdsStore(
+    useShallow((state) => ({
+      interstitial: state.interstitialReady,
+      rewarded: state.rewardedReady,
+      isInitializing: state.isInitializing,
+    }))
+  );
 };
 
 // ============================================================
