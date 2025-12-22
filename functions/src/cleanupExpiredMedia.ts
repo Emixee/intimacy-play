@@ -36,6 +36,18 @@ const MEDIA_PATH_PREFIX = "sessions";
 const REGION = "europe-west1";
 
 // ============================================================
+// TYPES
+// ============================================================
+
+interface StorageError extends Error {
+  code?: number | string;
+}
+
+interface FileMetadata {
+  size?: string | number;
+}
+
+// ============================================================
 // HELPERS
 // ============================================================
 
@@ -73,13 +85,14 @@ const safeDeleteFile = async (filePath: string): Promise<boolean> => {
     await storage.file(filePath).delete();
     console.log(`[Cleanup] Deleted file: ${filePath}`);
     return true;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const storageError = error as StorageError;
     // Ignorer si le fichier n'existe pas (déjà supprimé)
-    if (error.code === 404) {
+    if (storageError.code === 404) {
       console.log(`[Cleanup] File not found (already deleted): ${filePath}`);
       return true;
     }
-    console.error(`[Cleanup] Error deleting file ${filePath}:`, error.message);
+    console.error(`[Cleanup] Error deleting file ${filePath}:`, storageError.message);
     return false;
   }
 };
@@ -125,7 +138,7 @@ export const cleanupExpiredMedia = functions
     memory: "512MB",
   })
   .pubsub.schedule("every 5 minutes")
-  .onRun(async (context) => {
+  .onRun(async () => {
     console.log("[Cleanup] Starting expired media cleanup...");
     console.log(`[Cleanup] Execution time: ${new Date().toISOString()}`);
 
@@ -218,8 +231,9 @@ export const cleanupExpiredMedia = functions
       );
 
       return null;
-    } catch (error: any) {
-      console.error("[Cleanup] Fatal error during cleanup:", error);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("[Cleanup] Fatal error during cleanup:", err.message);
       throw error; // Relancer pour que Cloud Functions enregistre l'échec
     }
   });
@@ -279,7 +293,7 @@ export const onSessionCompleted = functions
 
           // Supprimer chaque fichier
           const deletePromises = files.map((file) =>
-            file.delete().catch((err: any) => {
+            file.delete().catch((err: Error) => {
               console.error(`[Cleanup] Error deleting ${file.name}:`, err.message);
               return null;
             })
@@ -292,8 +306,9 @@ export const onSessionCompleted = functions
         } else {
           console.log(`[Cleanup] No files found in Storage for session ${sessionCode}`);
         }
-      } catch (storageError: any) {
-        console.error("[Cleanup] Storage cleanup error:", storageError.message);
+      } catch (storageError: unknown) {
+        const err = storageError as Error;
+        console.error("[Cleanup] Storage cleanup error:", err.message);
         // Continuer avec la suppression des messages même si Storage échoue
       }
 
@@ -347,8 +362,9 @@ export const onSessionCompleted = functions
       );
 
       return null;
-    } catch (error: any) {
-      console.error(`[Cleanup] Error cleaning session ${sessionCode}:`, error);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error(`[Cleanup] Error cleaning session ${sessionCode}:`, err.message);
       throw error;
     }
   });
@@ -448,8 +464,8 @@ export const manualCleanup = functions
             try {
               await file.delete();
               filesDeleted++;
-            } catch (err) {
-              console.error(`[ManualCleanup] Error deleting ${file.name}`);
+            } catch (deleteError) {
+              console.error(`[ManualCleanup] Error deleting ${file.name}:`, deleteError);
             }
           }
 
@@ -495,11 +511,12 @@ export const manualCleanup = functions
               "ou spécifiez un sessionCode pour nettoyer une session spécifique.",
           };
         }
-      } catch (error: any) {
-        console.error("[ManualCleanup] Error:", error);
+      } catch (error: unknown) {
+        const err = error as Error;
+        console.error("[ManualCleanup] Error:", err.message);
         throw new functions.https.HttpsError(
           "internal",
-          `Erreur lors du nettoyage: ${error.message}`
+          `Erreur lors du nettoyage: ${err.message}`
         );
       }
     }
@@ -533,7 +550,7 @@ export const getStorageStats = functions
     timeoutSeconds: 60,
     memory: "256MB",
   })
-  .https.onCall(async (data, context): Promise<StorageStatsResponse> => {
+  .https.onCall(async (_data, context): Promise<StorageStatsResponse> => {
     // Vérifier l'authentification
     if (!context.auth) {
       throw new functions.https.HttpsError(
@@ -583,7 +600,8 @@ export const getStorageStats = functions
       let totalSizeBytes = 0;
       for (const file of files) {
         const [metadata] = await file.getMetadata();
-        totalSizeBytes += parseInt(metadata.size as string, 10) || 0;
+        const fileMetadata = metadata as FileMetadata;
+        totalSizeBytes += parseInt(String(fileMetadata.size || 0), 10);
       }
 
       const stats: StorageStatsResponse = {
@@ -598,11 +616,12 @@ export const getStorageStats = functions
       console.log("[Stats] Statistics computed:", stats);
 
       return stats;
-    } catch (error: any) {
-      console.error("[Stats] Error computing statistics:", error);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("[Stats] Error computing statistics:", err.message);
       throw new functions.https.HttpsError(
         "internal",
-        `Erreur: ${error.message}`
+        `Erreur: ${err.message}`
       );
     }
   });
