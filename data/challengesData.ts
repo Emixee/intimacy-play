@@ -1,24 +1,36 @@
 /**
- * Données des défis pour Intimacy Play - Version étendue
+ * Wrapper pour enrichir les défis existants avec la structure étendue
  * 
- * Structure étendue avec :
- * - id: Identifiant unique (format: n{level}_{gender[0]}_{numero})
- * - text: Texte du défi
- * - level: Niveau d'intensité (1-4)
- * - gender: Genre cible ('homme' | 'femme')
- * - type: Type de média ('audio' | 'video' | 'photo' | 'texte')
- * - theme: Thème du défi (correspond aux IDs de utils/constants.ts)
- * - hasToy: Si le défi nécessite un jouet
- * - toyName: Nom du jouet si hasToy=true (correspond aux IDs de TOYS)
+ * Ce fichier :
+ * 1. Importe les défis existants depuis challenges.ts
+ * 2. Ajoute automatiquement : id, hasToy, toyName
+ * 3. Détecte les jouets mentionnés dans le texte des défis
  * 
- * Total : 648 défis
- * - Niveau 1 : 86 (43 homme + 43 femme) - Romantique (Gratuit)
- * - Niveau 2 : 70 (35 homme + 35 femme) - Sensuel (Gratuit)
- * - Niveau 3 : 163 (81 homme + 82 femme) - Érotique (Premium)
- * - Niveau 4 : 329 (161 homme + 168 femme) - Explicite (Premium)
+ * Structure étendue :
+ * - id: Identifiant unique (format: n{level}_{h/f}_{numero})
+ * - hasToy: Si le défi nécessite un jouet (détecté automatiquement)
+ * - toyName: Nom du jouet si applicable
  */
 
-import type { IntensityLevel, Gender, ChallengeType } from "../types";
+import type {
+  Gender,
+  IntensityLevel,
+  ChallengeType,
+  SessionChallenge,
+  PlayerRole,
+} from "../types";
+
+// Import des défis existants
+import {
+  CHALLENGES_N1_HOMME as RAW_N1_H,
+  CHALLENGES_N1_FEMME as RAW_N1_F,
+  CHALLENGES_N2_HOMME as RAW_N2_H,
+  CHALLENGES_N2_FEMME as RAW_N2_F,
+  CHALLENGES_N3_HOMME as RAW_N3_H,
+  CHALLENGES_N3_FEMME as RAW_N3_F,
+  CHALLENGES_N4_HOMME as RAW_N4_H,
+  CHALLENGES_N4_FEMME as RAW_N4_F,
+} from "./challenges";
 
 // ============================================================
 // TYPES
@@ -28,7 +40,7 @@ import type { IntensityLevel, Gender, ChallengeType } from "../types";
  * Template de défi étendu avec support jouets
  */
 export interface ExtendedChallengeTemplate {
-  /** Identifiant unique (format: n{level}_{gender[0]}_{numero}) */
+  /** Identifiant unique (format: n{level}_{h/f}_{numero}) */
   id: string;
   /** Texte du défi */
   text: string;
@@ -46,849 +58,94 @@ export interface ExtendedChallengeTemplate {
   toyName: string | null;
 }
 
-// ============================================================
-// DÉFIS NIVEAU 1 - ROMANTIQUE (Gratuit)
-// 10 exemples par genre pour test
-// ============================================================
-
-export const CHALLENGES_N1_HOMME: ExtendedChallengeTemplate[] = [
-  {
-    id: "n1_h_001",
-    text: "Enregistre-toi en train de lui dire 3 choses que tu aimes chez elle",
-    level: 1,
-    gender: "homme",
-    type: "audio",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_h_002",
-    text: "Chante-lui une chanson qui te fait penser à elle",
-    level: 1,
-    gender: "homme",
-    type: "audio",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_h_003",
-    text: "Raconte-lui ton plus beau souvenir ensemble",
-    level: 1,
-    gender: "homme",
-    type: "audio",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_h_004",
-    text: "Dis-lui ce que tu ressens quand tu penses à elle",
-    level: 1,
-    gender: "homme",
-    type: "audio",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_h_005",
-    text: "Enregistre un message de bonne nuit personnalisé",
-    level: 1,
-    gender: "homme",
-    type: "audio",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_h_006",
-    text: "Envoie une selfie de toi avec un grand sourire pour elle",
-    level: 1,
-    gender: "homme",
-    type: "photo",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_h_007",
-    text: "Photographie un endroit qui te fait penser à elle",
-    level: 1,
-    gender: "homme",
-    type: "photo",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_h_008",
-    text: "Envoie une photo du ciel et dédie-la lui",
-    level: 1,
-    gender: "homme",
-    type: "photo",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_h_009",
-    text: "Filme-toi en train de lui envoyer un bisou",
-    level: 1,
-    gender: "homme",
-    type: "video",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_h_010",
-    text: "Enregistre une vidéo de toi en lui disant bonjour",
-    level: 1,
-    gender: "homme",
-    type: "video",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-];
-
-export const CHALLENGES_N1_FEMME: ExtendedChallengeTemplate[] = [
-  {
-    id: "n1_f_001",
-    text: "Enregistre-toi en train de lui dire 3 choses que tu aimes chez lui",
-    level: 1,
-    gender: "femme",
-    type: "audio",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_f_002",
-    text: "Chante-lui une chanson qui te fait penser à lui",
-    level: 1,
-    gender: "femme",
-    type: "audio",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_f_003",
-    text: "Raconte-lui ton plus beau souvenir ensemble",
-    level: 1,
-    gender: "femme",
-    type: "audio",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_f_004",
-    text: "Dis-lui ce que tu ressens quand tu penses à lui",
-    level: 1,
-    gender: "femme",
-    type: "audio",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_f_005",
-    text: "Enregistre un message de bonne nuit personnalisé",
-    level: 1,
-    gender: "femme",
-    type: "audio",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_f_006",
-    text: "Envoie une selfie de toi avec un grand sourire pour lui",
-    level: 1,
-    gender: "femme",
-    type: "photo",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_f_007",
-    text: "Photographie un endroit qui te fait penser à lui",
-    level: 1,
-    gender: "femme",
-    type: "photo",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_f_008",
-    text: "Prends une photo du ciel et dédie-la lui",
-    level: 1,
-    gender: "femme",
-    type: "photo",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_f_009",
-    text: "Filme-toi en train de lui envoyer un bisou",
-    level: 1,
-    gender: "femme",
-    type: "video",
-    theme: "romantic",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n1_f_010",
-    text: "Enregistre une vidéo de toi en lui disant bonjour",
-    level: 1,
-    gender: "femme",
-    type: "video",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-];
+/** Structure brute des défis existants */
+interface RawChallengeData {
+  text: string;
+  type: ChallengeType;
+  theme: string;
+}
 
 // ============================================================
-// DÉFIS NIVEAU 2 - SENSUEL (Gratuit)
-// 10 exemples par genre pour test
+// MAPPING DES JOUETS (pour détection automatique)
 // ============================================================
 
-export const CHALLENGES_N2_HOMME: ExtendedChallengeTemplate[] = [
-  {
-    id: "n2_h_001",
-    text: "Décris-lui ce que tu ferais si tu pouvais l'embrasser maintenant",
-    level: 2,
-    gender: "homme",
-    type: "audio",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_h_002",
-    text: "Murmure-lui des mots doux comme si elle était près de toi",
-    level: 2,
-    gender: "homme",
-    type: "audio",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_h_003",
-    text: "Raconte-lui ton fantasme le plus romantique avec elle",
-    level: 2,
-    gender: "homme",
-    type: "audio",
-    theme: "fantasies",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_h_004",
-    text: "Dis-lui ce qui te fait craquer chez elle physiquement",
-    level: 2,
-    gender: "homme",
-    type: "audio",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_h_005",
-    text: "Enregistre un message avec ta voix la plus sensuelle",
-    level: 2,
-    gender: "homme",
-    type: "audio",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_h_006",
-    text: "Envoie une selfie miroir de toi torse nu avec un sourire séducteur",
-    level: 2,
-    gender: "homme",
-    type: "photo",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_h_007",
-    text: "Prends une selfie miroir suggestive en boxer",
-    level: 2,
-    gender: "homme",
-    type: "photo",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_h_008",
-    text: "Envoie une selfie de toi te mordant la lèvre",
-    level: 2,
-    gender: "homme",
-    type: "photo",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_h_009",
-    text: "Filme-toi en train d'enlever ta chemise lentement",
-    level: 2,
-    gender: "homme",
-    type: "video",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_h_010",
-    text: "Enregistre une vidéo de toi dansant sensuellement",
-    level: 2,
-    gender: "homme",
-    type: "video",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-];
-
-export const CHALLENGES_N2_FEMME: ExtendedChallengeTemplate[] = [
-  {
-    id: "n2_f_001",
-    text: "Décris-lui ce que tu ferais si tu pouvais l'embrasser maintenant",
-    level: 2,
-    gender: "femme",
-    type: "audio",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_f_002",
-    text: "Murmure-lui des mots doux comme s'il était près de toi",
-    level: 2,
-    gender: "femme",
-    type: "audio",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_f_003",
-    text: "Raconte-lui ton fantasme le plus romantique avec lui",
-    level: 2,
-    gender: "femme",
-    type: "audio",
-    theme: "fantasies",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_f_004",
-    text: "Dis-lui ce qui te fait craquer chez lui physiquement",
-    level: 2,
-    gender: "femme",
-    type: "audio",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_f_005",
-    text: "Enregistre un message avec ta voix la plus sensuelle",
-    level: 2,
-    gender: "femme",
-    type: "audio",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_f_006",
-    text: "Envoie une selfie miroir de toi en lingerie fine",
-    level: 2,
-    gender: "femme",
-    type: "photo",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_f_007",
-    text: "Prends une selfie miroir suggestive en nuisette",
-    level: 2,
-    gender: "femme",
-    type: "photo",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_f_008",
-    text: "Envoie une selfie de toi te mordant la lèvre",
-    level: 2,
-    gender: "femme",
-    type: "photo",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_f_009",
-    text: "Filme-toi en train d'enlever ton haut lentement",
-    level: 2,
-    gender: "femme",
-    type: "video",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n2_f_010",
-    text: "Enregistre une vidéo de toi dansant sensuellement",
-    level: 2,
-    gender: "femme",
-    type: "video",
-    theme: "sensual",
-    hasToy: false,
-    toyName: null,
-  },
-];
+/**
+ * Mots-clés pour détecter les jouets dans le texte des défis
+ * Clé = toyName (ID du jouet), Valeur = mots-clés à chercher
+ */
+const TOY_KEYWORDS: Record<string, string[]> = {
+  vibrator: ["vibromasseur", "vibro", "vibrant", "vibrateur"],
+  handcuffs: ["menottes", "menotte", "attache", "attaché", "attachée", "attachées"],
+  blindfold: ["bandeau", "yeux bandés", "les yeux bandés", "aveugle"],
+  anal_plug: ["plug", "plug anal"],
+  dildo: ["gode", "dildo", "gode-ceinture", "strap-on", "strap on"],
+  cock_ring: ["cockring", "cock ring", "anneau"],
+  massage_oil: ["huile", "huile de massage", "lubrifiant", "lubrifié", "lubrifiée"],
+  feathers: ["plume", "plumes"],
+  nipple_clamps: ["pince", "pinces", "pince à tétons", "pinces à tétons", "pince à linge", "pinces à linge"],
+  collar: ["collier", "laisse"],
+};
 
 // ============================================================
-// DÉFIS NIVEAU 3 - ÉROTIQUE (Premium)
-// 10 exemples par genre pour test (incluant défis avec jouets)
+// FONCTIONS DE CONVERSION
 // ============================================================
 
-export const CHALLENGES_N3_HOMME: ExtendedChallengeTemplate[] = [
-  {
-    id: "n3_h_001",
-    text: "Décris-lui en détail comment tu aimerais explorer son corps",
-    level: 3,
-    gender: "homme",
-    type: "audio",
-    theme: "foreplay",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_h_002",
-    text: "Enregistre-toi en train de gémir doucement en pensant à elle",
-    level: 3,
-    gender: "homme",
-    type: "audio",
-    theme: "dirty_talk",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_h_003",
-    text: "Raconte-lui un fantasme érotique détaillé",
-    level: 3,
-    gender: "homme",
-    type: "audio",
-    theme: "fantasies",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_h_004",
-    text: "Envoie une photo de ton érection à travers ton boxer",
-    level: 3,
-    gender: "homme",
-    type: "photo",
-    theme: "exhibitionism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_h_005",
-    text: "Prends une selfie miroir de toi nu",
-    level: 3,
-    gender: "homme",
-    type: "photo",
-    theme: "exhibitionism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_h_006",
-    text: "Filme-toi en train de te déshabiller complètement",
-    level: 3,
-    gender: "homme",
-    type: "video",
-    theme: "voyeurism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_h_007",
-    text: "Enregistre-toi en donnant des ordres d'une voix autoritaire",
-    level: 3,
-    gender: "homme",
-    type: "audio",
-    theme: "domination",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_h_008",
-    text: "Mets le bandeau et envoie une photo de toi les yeux bandés",
-    level: 3,
-    gender: "homme",
-    type: "photo",
-    theme: "bdsm_light",
-    hasToy: true,
-    toyName: "blindfold",
-  },
-  {
-    id: "n3_h_009",
-    text: "Attache-toi les poignets avec les menottes et prends une selfie",
-    level: 3,
-    gender: "homme",
-    type: "photo",
-    theme: "submission",
-    hasToy: true,
-    toyName: "handcuffs",
-  },
-  {
-    id: "n3_h_010",
-    text: "Utilise l'huile de massage et filme-toi te massant le torse",
-    level: 3,
-    gender: "homme",
-    type: "video",
-    theme: "massage",
-    hasToy: true,
-    toyName: "massage_oil",
-  },
-];
+/**
+ * Détecte si un défi nécessite un jouet et lequel
+ */
+function detectToy(text: string): { hasToy: boolean; toyName: string | null } {
+  const lowerText = text.toLowerCase();
+  
+  for (const [toyName, keywords] of Object.entries(TOY_KEYWORDS)) {
+    for (const keyword of keywords) {
+      if (lowerText.includes(keyword.toLowerCase())) {
+        return { hasToy: true, toyName };
+      }
+    }
+  }
+  
+  return { hasToy: false, toyName: null };
+}
 
-export const CHALLENGES_N3_FEMME: ExtendedChallengeTemplate[] = [
-  {
-    id: "n3_f_001",
-    text: "Décris-lui en détail comment tu aimerais qu'il explore ton corps",
-    level: 3,
-    gender: "femme",
-    type: "audio",
-    theme: "foreplay",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_f_002",
-    text: "Enregistre-toi en train de gémir doucement en pensant à lui",
-    level: 3,
-    gender: "femme",
-    type: "audio",
-    theme: "dirty_talk",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_f_003",
-    text: "Raconte-lui un fantasme érotique détaillé",
-    level: 3,
-    gender: "femme",
-    type: "audio",
-    theme: "fantasies",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_f_004",
-    text: "Envoie une photo de ton intimité à travers ta culotte",
-    level: 3,
-    gender: "femme",
-    type: "photo",
-    theme: "exhibitionism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_f_005",
-    text: "Prends une selfie miroir de toi nue",
-    level: 3,
-    gender: "femme",
-    type: "photo",
-    theme: "exhibitionism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_f_006",
-    text: "Filme-toi en train de te déshabiller complètement",
-    level: 3,
-    gender: "femme",
-    type: "video",
-    theme: "voyeurism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_f_007",
-    text: "Enregistre-toi en donnant des ordres d'une voix autoritaire",
-    level: 3,
-    gender: "femme",
-    type: "audio",
-    theme: "domination",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n3_f_008",
-    text: "Mets le bandeau et envoie une photo de toi les yeux bandés",
-    level: 3,
-    gender: "femme",
-    type: "photo",
-    theme: "bdsm_light",
-    hasToy: true,
-    toyName: "blindfold",
-  },
-  {
-    id: "n3_f_009",
-    text: "Mets les menottes et prends une selfie les mains attachées",
-    level: 3,
-    gender: "femme",
-    type: "photo",
-    theme: "submission",
-    hasToy: true,
-    toyName: "handcuffs",
-  },
-  {
-    id: "n3_f_010",
-    text: "Utilise l'huile de massage et filme-toi te massant la poitrine",
-    level: 3,
-    gender: "femme",
-    type: "video",
-    theme: "massage",
-    hasToy: true,
-    toyName: "massage_oil",
-  },
-];
+/**
+ * Convertit un tableau de défis bruts en défis étendus
+ */
+function convertChallenges(
+  rawChallenges: RawChallengeData[],
+  level: IntensityLevel,
+  gender: Gender
+): ExtendedChallengeTemplate[] {
+  const genderCode = gender === "homme" ? "h" : "f";
+  
+  return rawChallenges.map((raw, index) => {
+    const { hasToy, toyName } = detectToy(raw.text);
+    const id = `n${level}_${genderCode}_${String(index + 1).padStart(3, "0")}`;
+    
+    return {
+      id,
+      text: raw.text,
+      level,
+      gender,
+      type: raw.type,
+      theme: raw.theme,
+      hasToy,
+      toyName,
+    };
+  });
+}
 
 // ============================================================
-// DÉFIS NIVEAU 4 - EXPLICITE (Premium)
-// 10 exemples par genre pour test (incluant défis avec jouets)
+// DÉFIS CONVERTIS
 // ============================================================
 
-export const CHALLENGES_N4_HOMME: ExtendedChallengeTemplate[] = [
-  {
-    id: "n4_h_001",
-    text: "Enregistre-toi en train de te masturber en gémissant son prénom",
-    level: 4,
-    gender: "homme",
-    type: "audio",
-    theme: "voyeurism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_h_002",
-    text: "Décris-lui exactement ce que tu fais pendant que tu te touches",
-    level: 4,
-    gender: "homme",
-    type: "audio",
-    theme: "dirty_talk",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_h_003",
-    text: "Enregistre tes gémissements pendant que tu jouis",
-    level: 4,
-    gender: "homme",
-    type: "audio",
-    theme: "voyeurism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_h_004",
-    text: "Envoie une photo de ta main tenant ton sexe en érection",
-    level: 4,
-    gender: "homme",
-    type: "photo",
-    theme: "exhibitionism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_h_005",
-    text: "Prends une photo de ton sexe dressé, gros plan",
-    level: 4,
-    gender: "homme",
-    type: "photo",
-    theme: "exhibitionism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_h_006",
-    text: "Filme ta main montant et descendant sur ton sexe",
-    level: 4,
-    gender: "homme",
-    type: "video",
-    theme: "voyeurism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_h_007",
-    text: "Filme-toi en train de jouir en disant son prénom",
-    level: 4,
-    gender: "homme",
-    type: "video",
-    theme: "voyeurism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_h_008",
-    text: "Utilise le vibromasseur sur tes testicules et filme ta réaction",
-    level: 4,
-    gender: "homme",
-    type: "video",
-    theme: "torrid",
-    hasToy: true,
-    toyName: "vibrator",
-  },
-  {
-    id: "n4_h_009",
-    text: "Insère le plug anal et envoie une photo de toi le portant",
-    level: 4,
-    gender: "homme",
-    type: "photo",
-    theme: "bdsm_light",
-    hasToy: true,
-    toyName: "anal_plug",
-  },
-  {
-    id: "n4_h_010",
-    text: "Mets le cockring et prends une photo de ton érection avec",
-    level: 4,
-    gender: "homme",
-    type: "photo",
-    theme: "torrid",
-    hasToy: true,
-    toyName: "cock_ring",
-  },
-];
-
-export const CHALLENGES_N4_FEMME: ExtendedChallengeTemplate[] = [
-  {
-    id: "n4_f_001",
-    text: "Enregistre-toi en train de te masturber en gémissant son prénom",
-    level: 4,
-    gender: "femme",
-    type: "audio",
-    theme: "voyeurism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_f_002",
-    text: "Décris-lui exactement ce que tu fais pendant que tu te touches",
-    level: 4,
-    gender: "femme",
-    type: "audio",
-    theme: "dirty_talk",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_f_003",
-    text: "Enregistre tes gémissements pendant que tu jouis",
-    level: 4,
-    gender: "femme",
-    type: "audio",
-    theme: "voyeurism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_f_004",
-    text: "Envoie une photo de ta main sur ton sexe ouvert",
-    level: 4,
-    gender: "femme",
-    type: "photo",
-    theme: "exhibitionism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_f_005",
-    text: "Prends une photo de ton intimité, gros plan",
-    level: 4,
-    gender: "femme",
-    type: "photo",
-    theme: "exhibitionism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_f_006",
-    text: "Filme tes doigts entrant et sortant de ton sexe",
-    level: 4,
-    gender: "femme",
-    type: "video",
-    theme: "voyeurism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_f_007",
-    text: "Filme-toi en train de jouir en disant son prénom",
-    level: 4,
-    gender: "femme",
-    type: "video",
-    theme: "voyeurism",
-    hasToy: false,
-    toyName: null,
-  },
-  {
-    id: "n4_f_008",
-    text: "Utilise le vibromasseur sur ton clitoris et filme ta réaction",
-    level: 4,
-    gender: "femme",
-    type: "video",
-    theme: "torrid",
-    hasToy: true,
-    toyName: "vibrator",
-  },
-  {
-    id: "n4_f_009",
-    text: "Insère le plug anal et envoie une photo de toi le portant",
-    level: 4,
-    gender: "femme",
-    type: "photo",
-    theme: "bdsm_light",
-    hasToy: true,
-    toyName: "anal_plug",
-  },
-  {
-    id: "n4_f_010",
-    text: "Utilise le gode et filme-toi en plein plaisir",
-    level: 4,
-    gender: "femme",
-    type: "video",
-    theme: "torrid",
-    hasToy: true,
-    toyName: "dildo",
-  },
-];
+export const CHALLENGES_N1_HOMME = convertChallenges(RAW_N1_H, 1, "homme");
+export const CHALLENGES_N1_FEMME = convertChallenges(RAW_N1_F, 1, "femme");
+export const CHALLENGES_N2_HOMME = convertChallenges(RAW_N2_H, 2, "homme");
+export const CHALLENGES_N2_FEMME = convertChallenges(RAW_N2_F, 2, "femme");
+export const CHALLENGES_N3_HOMME = convertChallenges(RAW_N3_H, 3, "homme");
+export const CHALLENGES_N3_FEMME = convertChallenges(RAW_N3_F, 3, "femme");
+export const CHALLENGES_N4_HOMME = convertChallenges(RAW_N4_H, 4, "homme");
+export const CHALLENGES_N4_FEMME = convertChallenges(RAW_N4_F, 4, "femme");
 
 // ============================================================
 // MAP DES DÉFIS PAR NIVEAU ET GENRE
@@ -979,15 +236,36 @@ export function getChallengesWithToy(
 }
 
 /**
+ * Récupère les défis sans jouet
+ */
+export function getChallengesWithoutToy(): ExtendedChallengeTemplate[] {
+  return getAllChallenges().filter((c) => !c.hasToy);
+}
+
+/**
  * Récupère les statistiques des défis
  */
 export function getChallengeStats(): {
   total: number;
   byLevel: Record<IntensityLevel, { homme: number; femme: number; total: number }>;
   withToys: number;
+  byToy: Record<string, number>;
   byType: Record<ChallengeType, number>;
+  byTheme: Record<string, number>;
 } {
   const all = getAllChallenges();
+  
+  // Compter par jouet
+  const byToy: Record<string, number> = {};
+  all.filter((c) => c.hasToy && c.toyName).forEach((c) => {
+    byToy[c.toyName!] = (byToy[c.toyName!] || 0) + 1;
+  });
+  
+  // Compter par thème
+  const byTheme: Record<string, number> = {};
+  all.forEach((c) => {
+    byTheme[c.theme] = (byTheme[c.theme] || 0) + 1;
+  });
   
   return {
     total: all.length,
@@ -1014,13 +292,47 @@ export function getChallengeStats(): {
       },
     },
     withToys: all.filter((c) => c.hasToy).length,
+    byToy,
     byType: {
       audio: all.filter((c) => c.type === "audio").length,
       video: all.filter((c) => c.type === "video").length,
       photo: all.filter((c) => c.type === "photo").length,
       texte: all.filter((c) => c.type === "texte").length,
     },
+    byTheme,
   };
+}
+
+/**
+ * Vérifie si un niveau est accessible
+ */
+export function isLevelAccessible(
+  level: IntensityLevel,
+  isPremium: boolean
+): boolean {
+  // Niveaux 1-3 gratuits, niveau 4 premium
+  if (level <= 3) return true;
+  return isPremium;
+}
+
+/**
+ * Retourne les niveaux accessibles pour un utilisateur
+ */
+export function getAccessibleLevels(isPremium: boolean): IntensityLevel[] {
+  if (isPremium) {
+    return [1, 2, 3, 4];
+  }
+  return [1, 2, 3];
+}
+
+/**
+ * Retourne le nombre total de défis disponibles par niveau
+ */
+export function getChallengeCountByLevel(level: IntensityLevel): number {
+  return (
+    CHALLENGES_MAP[level].homme.length +
+    CHALLENGES_MAP[level].femme.length
+  );
 }
 
 // ============================================================
@@ -1029,10 +341,22 @@ export function getChallengeStats(): {
 
 export default {
   CHALLENGES_MAP,
+  CHALLENGES_N1_HOMME,
+  CHALLENGES_N1_FEMME,
+  CHALLENGES_N2_HOMME,
+  CHALLENGES_N2_FEMME,
+  CHALLENGES_N3_HOMME,
+  CHALLENGES_N3_FEMME,
+  CHALLENGES_N4_HOMME,
+  CHALLENGES_N4_FEMME,
   getAllChallenges,
   getChallengesByLevel,
   getChallengesByGender,
   getChallengesByTheme,
   getChallengesWithToy,
+  getChallengesWithoutToy,
   getChallengeStats,
+  isLevelAccessible,
+  getAccessibleLevels,
+  getChallengeCountByLevel,
 };
