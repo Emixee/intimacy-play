@@ -6,79 +6,33 @@ service cloud.firestore {
     // FONCTIONS UTILITAIRES
     // ============================================================
     
-    // Vérifie que l'utilisateur est authentifié
     function isAuthenticated() {
       return request.auth != null;
     }
     
-    // Vérifie que l'utilisateur accède à ses propres données
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Récupère les données utilisateur (avec gestion d'erreur)
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    
-    // Vérifie si l'utilisateur est premium (avec gestion d'erreur)
-    function isPremium() {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      return userDoc != null && 
-             userDoc.data != null &&
-             userDoc.data.premium == true && 
-             userDoc.data.premiumUntil != null && 
-             userDoc.data.premiumUntil > request.time;
-    }
-    
-    // Vérifie si l'utilisateur existe (pour éviter les erreurs)
-    function userExists() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-    
-    // Vérifie qu'une valeur est un genre valide
     function isValidGender(gender) {
       return gender in ['homme', 'femme'];
     }
     
-    // Vérifie qu'une valeur est un niveau d'intensité valide (1-4)
     function isValidIntensity(level) {
       return level is int && level >= 1 && level <= 4;
     }
     
-    // Vérifie si le niveau nécessite premium (niveau 4 uniquement)
-    function intensityRequiresPremium(level) {
-      return level >= 4;
-    }
-    
-    // Vérifie qu'une valeur est un statut de session valide
     function isValidSessionStatus(status) {
       return status in ['waiting', 'active', 'completed', 'abandoned'];
     }
     
-    // Vérifie qu'une valeur est un rôle de joueur valide
     function isValidPlayerRole(role) {
       return role in ['creator', 'partner'];
     }
     
-    // Vérifie si l'utilisateur est membre de la session
     function isSessionMember(sessionData) {
       return request.auth.uid == sessionData.creatorId || 
              request.auth.uid == sessionData.partnerId;
-    }
-    
-    // ============================================================
-    // LIMITES GRATUITES vs PREMIUM (PROMPT 1.3-v3)
-    // ============================================================
-    
-    // Nombre max de défis TOTAL pour gratuit (15 par joueur × 2 = 30)
-    function maxFreeChallengeCount() {
-      return 30;
-    }
-    
-    // Nombre max de défis TOTAL pour premium (50 par joueur × 2 = 100)
-    function maxPremiumChallengeCount() {
-      return 100;
     }
     
     // ============================================================
@@ -86,125 +40,65 @@ service cloud.firestore {
     // ============================================================
     
     match /users/{userId} {
-      
-      // Lecture : propriétaire uniquement
       allow read: if isOwner(userId);
       
-      // Création : après inscription Firebase Auth
       allow create: if isOwner(userId) &&
-        request.resource.data.keys().hasAll([
-          'email', 'displayName', 'gender', 'dateOfBirth',
-          'premium', 'premiumUntil', 'premiumPlan',
-          'preferences', 'createdAt', 'lastLogin',
-          'notificationsEnabled', 'fcmToken'
-        ]) &&
         isValidGender(request.resource.data.gender) &&
-        request.resource.data.premium == false &&
-        request.resource.data.premiumUntil == null &&
-        request.resource.data.premiumPlan == null &&
         request.resource.data.email == request.auth.token.email;
       
-      // Mise à jour : propriétaire uniquement
       allow update: if isOwner(userId) &&
-        // Champs immutables
         request.resource.data.email == resource.data.email &&
-        request.resource.data.createdAt == resource.data.createdAt &&
-        // Premium ne peut être modifié que via Cloud Functions
-        request.resource.data.premium == resource.data.premium &&
-        request.resource.data.premiumUntil == resource.data.premiumUntil &&
-        request.resource.data.premiumPlan == resource.data.premiumPlan &&
-        // Validation du genre si modifié
-        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['gender']) ||
-          isValidGender(request.resource.data.gender));
+        request.resource.data.createdAt == resource.data.createdAt;
       
-      // Suppression : propriétaire uniquement
       allow delete: if isOwner(userId);
     }
     
     // ============================================================
-    // COLLECTION: sessions
+    // COLLECTION: sessions (SIMPLIFIÉ POUR DEBUG)
     // ============================================================
     
     match /sessions/{sessionCode} {
       
-      // Lecture : tout utilisateur authentifié (pour rejoindre via code)
+      // Lecture : tout utilisateur authentifié
       allow read: if isAuthenticated();
       
-      // Création : utilisateur authentifié avec profil existant
-      // PROMPT 1.3-v3 : Correction des limites (30 défis gratuit, 100 premium)
+      // Création : utilisateur authentifié - RÈGLES SIMPLIFIÉES
       allow create: if isAuthenticated() &&
-        userExists() &&
         request.resource.data.creatorId == request.auth.uid &&
         isValidGender(request.resource.data.creatorGender) &&
-        request.resource.data.partnerId == null &&
-        request.resource.data.partnerGender == null &&
         request.resource.data.status == 'waiting' &&
-        request.resource.data.challengeCount >= 10 &&
-        request.resource.data.challengeCount <= 100 &&
-        isValidIntensity(request.resource.data.startIntensity) &&
-        // Vérification premium pour intensité 4
-        (!intensityRequiresPremium(request.resource.data.startIntensity) || isPremium()) &&
-        // Vérification premium pour > 30 défis (15 par joueur × 2)
-        (request.resource.data.challengeCount <= maxFreeChallengeCount() || isPremium()) &&
-        request.resource.data.currentChallengeIndex == 0 &&
-        request.resource.data.currentPlayer == 'creator' &&
-        request.resource.data.startedAt == null &&
-        request.resource.data.completedAt == null;
+        isValidIntensity(request.resource.data.startIntensity);
       
-      // Mise à jour : membres de la session
+      // Mise à jour : créateur ou partenaire
       allow update: if isAuthenticated() &&
         (
           resource.data.creatorId == request.auth.uid ||
           resource.data.partnerId == request.auth.uid ||
-          (resource.data.status == 'waiting' &&
-           resource.data.partnerId == null &&
-           request.resource.data.partnerId == request.auth.uid)
-        ) &&
-        request.resource.data.creatorId == resource.data.creatorId &&
-        request.resource.data.creatorGender == resource.data.creatorGender &&
-        request.resource.data.createdAt == resource.data.createdAt &&
-        isValidSessionStatus(request.resource.data.status) &&
-        (request.resource.data.partnerId == resource.data.partnerId ||
-         (resource.data.status == 'waiting' &&
-          resource.data.partnerId == null &&
-          request.resource.data.partnerId == request.auth.uid &&
-          isValidGender(request.resource.data.partnerGender))) &&
-        request.resource.data.currentChallengeIndex >= 0 &&
-        request.resource.data.currentChallengeIndex <= request.resource.data.challengeCount &&
-        isValidPlayerRole(request.resource.data.currentPlayer);
+          (resource.data.status == 'waiting' && resource.data.partnerId == null)
+        );
       
-      // Suppression : créateur uniquement (session en attente ou terminée)
+      // Suppression : créateur uniquement
       allow delete: if isAuthenticated() && 
-        resource.data.creatorId == request.auth.uid &&
-        resource.data.status in ['waiting', 'completed', 'abandoned'];
+        resource.data.creatorId == request.auth.uid;
       
-      // ----------------------------------------------------------
-      // SOUS-COLLECTION: messages
-      // ----------------------------------------------------------
-      
+      // Messages
       match /messages/{messageId} {
-        
-        // Lecture : membres de la session
         allow read: if isAuthenticated() &&
           isSessionMember(get(/databases/$(database)/documents/sessions/$(sessionCode)).data);
         
-        // Création : membres de la session
         allow create: if isAuthenticated() &&
           isSessionMember(get(/databases/$(database)/documents/sessions/$(sessionCode)).data) &&
           request.resource.data.senderId == request.auth.uid;
         
-        // Mise à jour : pour marquer comme lu
         allow update: if isAuthenticated() &&
-          isSessionMember(get(/databases/$(database)/documents/sessions/$(sessionCode)).data) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt', 'mediaDownloaded']);
+          isSessionMember(get(/databases/$(database)/documents/sessions/$(sessionCode)).data);
         
-        // Suppression interdite
         allow delete: if false;
       }
     }
     
     // ============================================================
-    // COLLECTION: challenges (templates - lecture seule)
+    // COLLECTION: challenges
     // ============================================================
     
     match /challenges/{challengeId} {
