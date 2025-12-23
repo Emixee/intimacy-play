@@ -6,6 +6,8 @@
  * - Les défis du créateur sont filtrés selon ses préférences
  * - Les défis du partenaire sont filtrés selon ses préférences
  *
+ * FIX: Comparaison case-insensitive pour les thèmes
+ *
  * Fonctionnalités :
  * - Filtrage par thèmes sélectionnés (par joueur)
  * - Filtrage par jouets disponibles (par joueur)
@@ -227,6 +229,7 @@ function calculateProgressionDistribution(
 
 /**
  * Filtre par thèmes sélectionnés
+ * FIX: Comparaison case-insensitive (minuscules)
  */
 function filterByThemes(
   challenges: ExtendedChallengeTemplate[],
@@ -234,9 +237,16 @@ function filterByThemes(
 ): ExtendedChallengeTemplate[] {
   // Si aucun thème sélectionné, inclure "classique" par défaut
   if (selectedThemes.length === 0) {
-    return challenges.filter((c) => c.theme === "classique");
+    return challenges.filter((c) => c.theme.toLowerCase() === "classique");
   }
-  return challenges.filter((c) => selectedThemes.includes(c.theme));
+  
+  // Normaliser les thèmes sélectionnés en minuscules
+  const normalizedThemes = selectedThemes.map((t) => t.toLowerCase());
+  
+  // Comparer en minuscules
+  return challenges.filter((c) => 
+    normalizedThemes.includes(c.theme.toLowerCase())
+  );
 }
 
 /**
@@ -253,10 +263,13 @@ function filterByToys(
   }
 
   // Inclure les défis sans jouet + ceux avec jouets disponibles
+  // FIX: Comparaison case-insensitive pour les jouets aussi
+  const normalizedToys = availableToys.map((t) => t.toLowerCase());
+  
   return challenges.filter((c) => {
     if (!c.hasToy) return true;
     if (!c.toyName) return true;
-    return availableToys.includes(c.toyName);
+    return normalizedToys.includes(c.toyName.toLowerCase());
   });
 }
 
@@ -354,6 +367,12 @@ export function selectChallenges(config: SelectionConfig): SelectionResult {
     maxLevel
   );
 
+  // Log pour debug
+  console.log(`[ChallengeSelector] Creator themes: ${creatorPreferences.selectedThemes.join(", ")}`);
+  console.log(`[ChallengeSelector] Creator challenges after filter: ${creatorChallengesFiltered.length}`);
+  console.log(`[ChallengeSelector] Partner themes: ${partnerPreferences.selectedThemes.join(", ")}`);
+  console.log(`[ChallengeSelector] Partner challenges after filter: ${partnerChallengesFiltered.length}`);
+
   // Mélanger les pools
   const creatorPool = shuffleArray(creatorChallengesFiltered);
   const partnerPool = shuffleArray(partnerChallengesFiltered);
@@ -426,6 +445,8 @@ export function selectChallenges(config: SelectionConfig): SelectionResult {
 
   // Calculer les statistiques
   const stats = calculateStats(selectedChallenges);
+
+  console.log(`[ChallengeSelector] Selected ${selectedChallenges.length} challenges`);
 
   return {
     challenges: selectedChallenges,
@@ -626,6 +647,9 @@ export function selectChallengesForPlayer(
     maxLevel
   );
 
+  console.log(`[selectChallengesForPlayer] Gender: ${gender}, Themes: ${preferences.selectedThemes.join(", ")}`);
+  console.log(`[selectChallengesForPlayer] Filtered challenges: ${filteredChallenges.length}`);
+
   // Exclure les défis déjà utilisés
   const excludeSet = new Set(excludeTexts);
   const availableChallenges = filteredChallenges.filter(
@@ -678,6 +702,8 @@ export function selectChallengesForPlayer(
       });
     }
   }
+
+  console.log(`[selectChallengesForPlayer] Selected ${selectedChallenges.length} challenges for ${forPlayer}`);
 
   return selectedChallenges;
 }
