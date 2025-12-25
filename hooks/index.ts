@@ -1,5 +1,7 @@
 /**
  * Export centralisé des hooks
+ * 
+ * PROMPT SCREEN-PROTECTION : Ajout useScreenProtection
  */
 
 export { useAuth } from './useAuth';
@@ -10,3 +12,4 @@ export { usePremiumFeature } from './usePremiumFeature';
 export { useError } from './useError';
 export { useNetworkStatus } from './useNetworkStatus';
 export { useDebouncePress, useSinglePress } from './useDebouncePress';
+export { useScreenProtection, usePreventCapture } from './useScreenProtection';
