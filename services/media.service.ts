@@ -1,13 +1,20 @@
 /**
  * Service de gestion des médias du chat
  *
+ * PROMPT MEDIA-FIX : Corrections et améliorations
+ * - Fix crash après envoi photo
+ * - Meilleure gestion des vidéos
+ * - Logs de debug améliorés
+ * - Validation URI robuste
+ * - Durée expiration 2 minutes
+ *
  * Gère l'upload et le téléchargement des médias éphémères :
  * - Upload vers Firebase Storage
- * - Création du message avec expiration (10 min)
+ * - Création du message avec expiration (2 min)
  * - Téléchargement dans la galerie (Premium)
  * - Génération de thumbnails pour vidéos
  *
- * IMPORTANT: Les médias expirent après 10 minutes et sont
+ * IMPORTANT: Les médias expirent après 2 minutes et sont
  * automatiquement supprimés par la Cloud Function cleanupExpiredMedia
  */
 
@@ -19,8 +26,6 @@ import {
   serverTimestamp,
   sessionsCollection,
   getSessionMediaPath,
-  uploadFile,
-  deleteFile,
 } from "../config/firebase";
 import {
   Message,
@@ -44,6 +49,7 @@ const MEDIA_ERROR_MESSAGES: Record<string, string> = {
   UPLOAD_FAILED: "Échec de l'envoi du média",
   DOWNLOAD_FAILED: "Échec du téléchargement",
   INVALID_MEDIA_TYPE: "Type de média non supporté",
+  INVALID_URI: "Fichier média invalide",
   FILE_TOO_LARGE: "Fichier trop volumineux (max 50 Mo)",
   UNKNOWN_ERROR: "Une erreur est survenue",
   NETWORK_ERROR: "Erreur de connexion. Vérifiez votre réseau",
@@ -63,7 +69,7 @@ const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 // Extensions supportées par type
 const SUPPORTED_EXTENSIONS: Record<string, string[]> = {
   photo: [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"],
-  video: [".mp4", ".mov", ".avi", ".webm", ".mkv"],
+  video: [".mp4", ".mov", ".avi", ".webm", ".mkv", ".3gp"],
   audio: [".mp3", ".m4a", ".wav", ".ogg", ".aac"],
 };
 
@@ -80,6 +86,7 @@ const MIME_TYPES: Record<string, string> = {
   ".avi": "video/x-msvideo",
   ".webm": "video/webm",
   ".mkv": "video/x-matroska",
+  ".3gp": "video/3gpp",
   ".mp3": "audio/mpeg",
   ".m4a": "audio/mp4",
   ".wav": "audio/wav",
@@ -107,16 +114,50 @@ const messagesCollection = (sessionCode: string) => {
 };
 
 /**
- * Détermine le type de média depuis l'URI
+ * Valide et nettoie l'URI d'un fichier
  */
-const getMediaTypeFromUri = (uri: string): MessageType | null => {
-  const extension = uri.substring(uri.lastIndexOf(".")).toLowerCase();
+const validateAndCleanUri = (uri: string): { valid: boolean; cleanUri: string; error?: string } => {
+  if (!uri || typeof uri !== "string") {
+    return { valid: false, cleanUri: "", error: "URI invalide" };
+  }
 
-  if (SUPPORTED_EXTENSIONS.photo.includes(extension)) return "photo";
-  if (SUPPORTED_EXTENSIONS.video.includes(extension)) return "video";
-  if (SUPPORTED_EXTENSIONS.audio.includes(extension)) return "audio";
+  let cleanUri = uri.trim();
 
-  return null;
+  // S'assurer que l'URI commence par file://
+  if (!cleanUri.startsWith("file://") && !cleanUri.startsWith("content://")) {
+    // Sur Android, certaines URIs peuvent ne pas avoir le préfixe
+    if (cleanUri.startsWith("/")) {
+      cleanUri = `file://${cleanUri}`;
+    } else {
+      return { valid: false, cleanUri: "", error: "Format URI non reconnu" };
+    }
+  }
+
+  return { valid: true, cleanUri };
+};
+
+/**
+ * Détermine l'extension depuis l'URI
+ */
+const getExtensionFromUri = (uri: string): string => {
+  // Essayer d'extraire l'extension de l'URI
+  const match = uri.match(/\.([a-zA-Z0-9]+)(\?|$)/);
+  if (match) {
+    return `.${match[1].toLowerCase()}`;
+  }
+
+  // Par défaut pour les photos
+  return ".jpg";
+};
+
+/**
+ * Valide l'extension pour un type donné
+ */
+const isValidExtension = (extension: string, type: MessageType): boolean => {
+  if (type === "text") return false;
+  const supported = SUPPORTED_EXTENSIONS[type];
+  if (!supported) return false;
+  return supported.includes(extension.toLowerCase());
 };
 
 /**
@@ -149,6 +190,45 @@ const isMediaExpired = (
 };
 
 // ============================================================
+// UPLOAD ROBUSTE
+// ============================================================
+
+/**
+ * Upload un fichier avec gestion d'erreurs robuste
+ */
+const uploadFileRobust = async (
+  storagePath: string,
+  localUri: string
+): Promise<string> => {
+  console.log(`[MediaService] uploadFileRobust - Path: ${storagePath}`);
+  console.log(`[MediaService] uploadFileRobust - URI: ${localUri.substring(0, 100)}...`);
+
+  try {
+    const reference = storage().ref(storagePath);
+    
+    // Upload avec await explicite
+    const uploadTask = reference.putFile(localUri);
+    
+    // Attendre la fin de l'upload
+    await uploadTask;
+    
+    console.log("[MediaService] Upload completed, getting download URL...");
+    
+    // Récupérer l'URL de téléchargement
+    const downloadUrl = await reference.getDownloadURL();
+    
+    console.log("[MediaService] Download URL obtained:", downloadUrl.substring(0, 50) + "...");
+    
+    return downloadUrl;
+  } catch (error: any) {
+    console.error("[MediaService] uploadFileRobust error:", error);
+    console.error("[MediaService] Error code:", error.code);
+    console.error("[MediaService] Error message:", error.message);
+    throw error;
+  }
+};
+
+// ============================================================
 // SERVICE MÉDIA
 // ============================================================
 
@@ -157,7 +237,7 @@ export const mediaService = {
    * Envoie un message avec média
    *
    * Upload le fichier vers Firebase Storage et crée un message
-   * avec une expiration de 10 minutes.
+   * avec une expiration de 2 minutes.
    *
    * @param sessionCode - Code de la session
    * @param senderId - UID de l'expéditeur
@@ -173,9 +253,14 @@ export const mediaService = {
     mediaUri: string,
     type: MessageType
   ): Promise<ApiResponse<Message>> => {
+    console.log("[MediaService] sendMediaMessage called");
+    console.log(`[MediaService] Session: ${sessionCode}, Type: ${type}`);
+    console.log(`[MediaService] URI: ${mediaUri.substring(0, 80)}...`);
+
     try {
       // Validation du type
       if (type === "text") {
+        console.error("[MediaService] Invalid type: text");
         return {
           success: false,
           error: getMediaErrorMessage("INVALID_MEDIA_TYPE"),
@@ -183,11 +268,25 @@ export const mediaService = {
         };
       }
 
+      // Validation de l'URI
+      const { valid, cleanUri, error } = validateAndCleanUri(mediaUri);
+      if (!valid) {
+        console.error("[MediaService] Invalid URI:", error);
+        return {
+          success: false,
+          error: getMediaErrorMessage("INVALID_URI"),
+          code: "INVALID_URI",
+        };
+      }
+
+      console.log(`[MediaService] Clean URI: ${cleanUri.substring(0, 80)}...`);
+
       const normalizedCode = normalizeCode(sessionCode);
 
       // Vérifier que la session existe
       const sessionDoc = await sessionsCollection().doc(normalizedCode).get();
       if (!sessionDoc.exists()) {
+        console.error("[MediaService] Session not found:", normalizedCode);
         return {
           success: false,
           error: getMediaErrorMessage("SESSION_NOT_FOUND"),
@@ -196,27 +295,57 @@ export const mediaService = {
       }
 
       // Extraire l'extension du fichier
-      const extension = mediaUri.substring(mediaUri.lastIndexOf(".")).toLowerCase();
-
-      // Valider l'extension
-      if (!SUPPORTED_EXTENSIONS[type]?.includes(extension)) {
-        return {
-          success: false,
-          error: getMediaErrorMessage("INVALID_MEDIA_TYPE"),
-          code: "INVALID_MEDIA_TYPE",
-        };
+      let extension = getExtensionFromUri(cleanUri);
+      
+      // Valider l'extension - si invalide, utiliser une extension par défaut
+      if (!isValidExtension(extension, type)) {
+        console.warn(`[MediaService] Invalid extension ${extension} for ${type}, using default`);
+        extension = type === "photo" ? ".jpg" : type === "video" ? ".mp4" : ".mp3";
       }
+
+      console.log(`[MediaService] Using extension: ${extension}`);
 
       // Générer le nom et le chemin du fichier
       const fileName = generateFileName(type, extension);
       const storagePath = getSessionMediaPath(normalizedCode, fileName);
 
-      console.log(`[MediaService] Uploading ${type} to ${storagePath}`);
+      console.log(`[MediaService] Uploading to: ${storagePath}`);
 
-      // Upload vers Firebase Storage
-      const mediaUrl = await uploadFile(storagePath, mediaUri);
+      // Upload vers Firebase Storage avec gestion robuste
+      let mediaUrl: string;
+      try {
+        mediaUrl = await uploadFileRobust(storagePath, cleanUri);
+      } catch (uploadError: any) {
+        console.error("[MediaService] Upload failed:", uploadError);
+        
+        // Erreur spécifique pour fichier trop gros
+        if (uploadError.code === "storage/quota-exceeded") {
+          return {
+            success: false,
+            error: getMediaErrorMessage("FILE_TOO_LARGE"),
+            code: "FILE_TOO_LARGE",
+          };
+        }
 
-      // Calculer l'expiration
+        // Erreur réseau
+        if (uploadError.code === "storage/unknown" || uploadError.code === "storage/retry-limit-exceeded") {
+          return {
+            success: false,
+            error: getMediaErrorMessage("NETWORK_ERROR"),
+            code: "NETWORK_ERROR",
+          };
+        }
+
+        return {
+          success: false,
+          error: getMediaErrorMessage("UPLOAD_FAILED"),
+          code: "UPLOAD_FAILED",
+        };
+      }
+
+      console.log("[MediaService] Upload successful, creating message...");
+
+      // Calculer l'expiration (2 minutes)
       const mediaExpiresAt = getExpirationTimestamp();
 
       // Créer le message
@@ -241,7 +370,7 @@ export const mediaService = {
         ...messageData,
       });
 
-      console.log(`[MediaService] Media message sent: ${messageRef.id}`);
+      console.log(`[MediaService] Message created: ${messageRef.id}`);
 
       // Retourner le message
       const message: Message = {
@@ -255,16 +384,8 @@ export const mediaService = {
         data: message,
       };
     } catch (error: any) {
-      console.error("[MediaService] Send media message error:", error);
-
-      // Erreur spécifique pour fichier trop gros
-      if (error.code === "storage/quota-exceeded") {
-        return {
-          success: false,
-          error: getMediaErrorMessage("FILE_TOO_LARGE"),
-          code: "FILE_TOO_LARGE",
-        };
-      }
+      console.error("[MediaService] sendMediaMessage error:", error);
+      console.error("[MediaService] Error stack:", error.stack);
 
       return {
         success: false,
@@ -290,9 +411,12 @@ export const mediaService = {
     messageId: string,
     isPremium: boolean
   ): Promise<ApiResponse<{ url: string; type: MessageType }>> => {
+    console.log(`[MediaService] downloadMedia - Message: ${messageId}`);
+    
     try {
       // Vérification Premium
       if (!isPremium) {
+        console.log("[MediaService] Premium required for download");
         return {
           success: false,
           error: getMediaErrorMessage("PREMIUM_REQUIRED"),
@@ -304,6 +428,7 @@ export const mediaService = {
       const messageDoc = await messageRef.get();
 
       if (!messageDoc.exists()) {
+        console.log("[MediaService] Message not found:", messageId);
         return {
           success: false,
           error: getMediaErrorMessage("MESSAGE_NOT_FOUND"),
@@ -315,6 +440,7 @@ export const mediaService = {
 
       // Vérifier que c'est bien un média
       if (message.type === "text" || !message.mediaUrl) {
+        console.log("[MediaService] Not a media message");
         return {
           success: false,
           error: getMediaErrorMessage("MEDIA_NOT_FOUND"),
@@ -324,6 +450,7 @@ export const mediaService = {
 
       // Vérifier l'expiration
       if (isMediaExpired(message.mediaExpiresAt)) {
+        console.log("[MediaService] Media expired");
         return {
           success: false,
           error: getMediaErrorMessage("MEDIA_EXPIRED"),
@@ -336,7 +463,7 @@ export const mediaService = {
         mediaDownloaded: true,
       });
 
-      console.log(`[MediaService] Media downloaded: ${messageId}`);
+      console.log(`[MediaService] Media marked as downloaded: ${messageId}`);
 
       return {
         success: true,
@@ -346,7 +473,7 @@ export const mediaService = {
         },
       };
     } catch (error: any) {
-      console.error("[MediaService] Download media error:", error);
+      console.error("[MediaService] downloadMedia error:", error);
       return {
         success: false,
         error: getMediaErrorMessage("DOWNLOAD_FAILED"),
@@ -378,7 +505,7 @@ export const mediaService = {
 
       return !isMediaExpired(message.mediaExpiresAt);
     } catch (error) {
-      console.error("[MediaService] Check media availability error:", error);
+      console.error("[MediaService] isMediaAvailable error:", error);
       return false;
     }
   },
@@ -428,13 +555,18 @@ export const mediaService = {
       const normalizedCode = normalizeCode(sessionCode);
       const storagePath = getSessionMediaPath(normalizedCode, fileName);
 
-      await deleteFile(storagePath);
+      await storage().ref(storagePath).delete();
 
       console.log(`[MediaService] Media deleted: ${storagePath}`);
 
       return { success: true };
     } catch (error: any) {
-      console.error("[MediaService] Delete media error:", error);
+      // Ignorer si le fichier n'existe pas
+      if (error.code === "storage/object-not-found") {
+        return { success: true };
+      }
+      
+      console.error("[MediaService] deleteMedia error:", error);
       return {
         success: false,
         error: getMediaErrorMessage("UNKNOWN_ERROR"),
@@ -475,7 +607,7 @@ export const mediaService = {
         data: listResult.items.length,
       };
     } catch (error: any) {
-      console.error("[MediaService] Delete all session media error:", error);
+      console.error("[MediaService] deleteAllSessionMedia error:", error);
       return {
         success: false,
         error: getMediaErrorMessage("UNKNOWN_ERROR"),
@@ -490,7 +622,13 @@ export const mediaService = {
    * @returns Type de média ou null si non supporté
    */
   detectMediaType: (uri: string): MessageType | null => {
-    return getMediaTypeFromUri(uri);
+    const extension = getExtensionFromUri(uri);
+
+    if (SUPPORTED_EXTENSIONS.photo.includes(extension)) return "photo";
+    if (SUPPORTED_EXTENSIONS.video.includes(extension)) return "video";
+    if (SUPPORTED_EXTENSIONS.audio.includes(extension)) return "audio";
+
+    return null;
   },
 
   /**
@@ -501,15 +639,14 @@ export const mediaService = {
    * @returns true si supporté
    */
   isExtensionSupported: (extension: string, type: MessageType): boolean => {
-    if (type === "text") return false;
-    return SUPPORTED_EXTENSIONS[type]?.includes(extension.toLowerCase()) ?? false;
+    return isValidExtension(extension, type);
   },
 
   // ============================================================
   // CONSTANTES EXPORTÉES
   // ============================================================
 
-  /** Durée d'expiration en minutes */
+  /** Durée d'expiration en minutes (maintenant 2 minutes) */
   EXPIRATION_MINUTES: MEDIA_EXPIRATION_MINUTES,
 
   /** Taille maximale des fichiers en Mo */

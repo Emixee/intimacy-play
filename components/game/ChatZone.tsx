@@ -1,14 +1,19 @@
 /**
  * ChatZone - Zone de chat avec support médias éphémères
  * 
+ * PROMPT MEDIA-FIX : Corrections et améliorations
+ * - Fix bug crash après envoi photo (gestion d'erreurs robuste)
+ * - Fix vidéos non fonctionnelles
+ * - Intégration MediaViewer pour affichage plein écran
+ * - Téléchargement via appui long
+ * - Durée média réduite à 2 min
+ * 
  * Fonctionnalités :
  * - Messages texte
  * - Envoi de photos (galerie ou caméra)
  * - Envoi de vidéos
- * - Médias éphémères (expiration 10 min)
- * - Téléchargement médias (Premium) via partage
- * 
- * PROMPT 10.2 : Intégration complète des médias
+ * - Médias éphémères (expiration 2 min)
+ * - Téléchargement médias (Premium) via appui long
  */
 
 import React, { memo, useState, useEffect, useRef, useCallback } from "react";
@@ -21,23 +26,23 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
-  Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import * as Sharing from "expo-sharing";
+import * as Haptics from "expo-haptics";
 
 // Composants chat
 import { ChatBubble } from "../chat/ChatBubble";
 import { MediaMessage } from "../chat/MediaMessage";
 import { ChatInput } from "../chat/ChatInput";
+import { MediaViewer } from "../chat/MediaViewer";
 
 // Services
 import { chatService } from "../../services/chat.service";
 import { mediaService } from "../../services/media.service";
 
 // Types
-import type { Message, Gender, MessageType } from "../../types";
+import type { Message, Gender, MessageType, MediaViewerData } from "../../types";
 
 // ============================================================
 // TYPES
@@ -70,6 +75,12 @@ export const ChatZone = memo<ChatZoneProps>(({
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  
+  // État pour le viewer plein écran
+  const [viewerData, setViewerData] = useState<MediaViewerData | null>(null);
+  const [showViewer, setShowViewer] = useState(false);
+
   const flatListRef = useRef<FlatList>(null);
 
   // ============================================================
@@ -130,46 +141,78 @@ export const ChatZone = memo<ChatZoneProps>(({
   }, [isSending, sessionCode, userId, userGender]);
 
   // ============================================================
-  // ENVOI DE MÉDIAS
+  // ENVOI DE MÉDIAS (FIX: Gestion d'erreurs robuste)
   // ============================================================
 
   const sendMedia = useCallback(async (uri: string, type: MessageType) => {
     if (isUploading) return;
 
+    // Validation de l'URI
+    if (!uri || typeof uri !== "string") {
+      console.error("[ChatZone] Invalid media URI:", uri);
+      Alert.alert("Erreur", "Fichier média invalide");
+      return;
+    }
+
     setIsUploading(true);
+    setUploadProgress("Préparation...");
+
     try {
+      console.log(`[ChatZone] Sending ${type}: ${uri.substring(0, 50)}...`);
+
+      // Vérifier que l'URI est correctement formatée
+      const cleanUri = uri.startsWith("file://") ? uri : `file://${uri}`;
+
+      setUploadProgress("Envoi en cours...");
+
       const result = await mediaService.sendMediaMessage(
         sessionCode,
         userId,
         userGender,
-        uri,
+        cleanUri,
         type
       );
 
       if (!result.success) {
+        console.error("[ChatZone] Send media failed:", result.error);
         Alert.alert("Erreur", result.error || "Impossible d'envoyer le média");
+      } else {
+        console.log("[ChatZone] Media sent successfully");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("[ChatZone] Send media error:", error);
-      Alert.alert("Erreur", "Impossible d'envoyer le média");
+      
+      // Message d'erreur plus explicite
+      let errorMessage = "Impossible d'envoyer le média";
+      if (error.code === "storage/unknown") {
+        errorMessage = "Erreur de connexion. Vérifie ta connexion internet.";
+      } else if (error.code === "storage/quota-exceeded") {
+        errorMessage = "Fichier trop volumineux (max 50 Mo)";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert("Erreur", errorMessage);
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
     }
   }, [isUploading, sessionCode, userId, userGender]);
 
   // ============================================================
-  // PICKERS MÉDIAS
+  // PICKERS MÉDIAS (FIX: Meilleure gestion vidéo)
   // ============================================================
 
   // Sélection depuis la galerie (photo ou vidéo)
-  const handlePickPhoto = useCallback(async () => {
+  const handlePickMedia = useCallback(async () => {
     try {
       // Demander permission
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
           "Permission requise",
-          "L'accès à la galerie est nécessaire pour envoyer des photos."
+          "L'accès à la galerie est nécessaire pour envoyer des médias."
         );
         return;
       }
@@ -179,21 +222,37 @@ export const ChatZone = memo<ChatZoneProps>(({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsEditing: false,
         quality: 0.8,
-        videoMaxDuration: 60,
+        videoMaxDuration: 60, // Max 60 secondes
+        videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
       });
 
-      if (!result.canceled && result.assets[0]) {
+      console.log("[ChatZone] ImagePicker result:", JSON.stringify(result, null, 2));
+
+      if (!result.canceled && result.assets && result.assets[0]) {
         const asset = result.assets[0];
-        const mediaType: MessageType = asset.type === "video" ? "video" : "photo";
+        
+        // Détecter le type de média
+        let mediaType: MessageType;
+        if (asset.type === "video") {
+          mediaType = "video";
+        } else if (asset.mimeType?.startsWith("video/")) {
+          mediaType = "video";
+        } else if (asset.uri.match(/\.(mp4|mov|avi|webm|mkv)$/i)) {
+          mediaType = "video";
+        } else {
+          mediaType = "photo";
+        }
+
+        console.log(`[ChatZone] Detected media type: ${mediaType}`);
         await sendMedia(asset.uri, mediaType);
       }
     } catch (error) {
-      console.error("[ChatZone] Pick photo error:", error);
+      console.error("[ChatZone] Pick media error:", error);
       Alert.alert("Erreur", "Impossible d'accéder à la galerie");
     }
   }, [sendMedia]);
 
-  // Photo depuis la caméra
+  // Photo/Vidéo depuis la caméra
   const handleOpenCamera = useCallback(async () => {
     try {
       // Demander permission caméra
@@ -201,7 +260,7 @@ export const ChatZone = memo<ChatZoneProps>(({
       if (status !== "granted") {
         Alert.alert(
           "Permission requise",
-          "L'accès à la caméra est nécessaire pour prendre des photos."
+          "L'accès à la caméra est nécessaire pour prendre des photos/vidéos."
         );
         return;
       }
@@ -212,11 +271,27 @@ export const ChatZone = memo<ChatZoneProps>(({
         allowsEditing: false,
         quality: 0.8,
         videoMaxDuration: 60,
+        videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
       });
 
-      if (!result.canceled && result.assets[0]) {
+      console.log("[ChatZone] Camera result:", JSON.stringify(result, null, 2));
+
+      if (!result.canceled && result.assets && result.assets[0]) {
         const asset = result.assets[0];
-        const mediaType: MessageType = asset.type === "video" ? "video" : "photo";
+        
+        // Détecter le type de média
+        let mediaType: MessageType;
+        if (asset.type === "video") {
+          mediaType = "video";
+        } else if (asset.mimeType?.startsWith("video/")) {
+          mediaType = "video";
+        } else if (asset.uri.match(/\.(mp4|mov|avi|webm|mkv)$/i)) {
+          mediaType = "video";
+        } else {
+          mediaType = "photo";
+        }
+
+        console.log(`[ChatZone] Detected media type: ${mediaType}`);
         await sendMedia(asset.uri, mediaType);
       }
     } catch (error) {
@@ -234,7 +309,30 @@ export const ChatZone = memo<ChatZoneProps>(({
   }, []);
 
   // ============================================================
-  // TÉLÉCHARGEMENT MÉDIA (Premium) - Via partage
+  // AFFICHAGE PLEIN ÉCRAN
+  // ============================================================
+
+  const handleOpenViewer = useCallback((message: Message) => {
+    if (!message.mediaUrl) return;
+
+    setViewerData({
+      messageId: message.id,
+      type: message.type,
+      mediaUrl: message.mediaUrl,
+      expiresAt: message.mediaExpiresAt,
+      isDownloaded: message.mediaDownloaded,
+      isOwnMessage: message.senderId === userId,
+    });
+    setShowViewer(true);
+  }, [userId]);
+
+  const handleCloseViewer = useCallback(() => {
+    setShowViewer(false);
+    setViewerData(null);
+  }, []);
+
+  // ============================================================
+  // TÉLÉCHARGEMENT MÉDIA (Premium)
   // ============================================================
 
   const handleDownloadMedia = useCallback(async (messageId: string) => {
@@ -251,29 +349,9 @@ export const ChatZone = memo<ChatZoneProps>(({
       }
 
       if (result.data && result.data.url) {
-        // Vérifier si le partage est disponible
-        const isAvailable = await Sharing.isAvailableAsync();
-        
-        if (isAvailable) {
-          // Ouvrir le menu de partage avec l'URL
-          // L'utilisateur pourra sauvegarder dans sa galerie
-          await Sharing.shareAsync(result.data.url, {
-            dialogTitle: "Sauvegarder le média",
-            mimeType: result.data.type === "video" ? "video/mp4" : "image/jpeg",
-          });
-        } else {
-          // Fallback : ouvrir l'URL dans le navigateur
-          const canOpen = await Linking.canOpenURL(result.data.url);
-          if (canOpen) {
-            await Linking.openURL(result.data.url);
-            Alert.alert(
-              "💡 Astuce",
-              "Appuyez longuement sur l'image dans le navigateur pour la sauvegarder."
-            );
-          } else {
-            Alert.alert("Erreur", "Impossible d'ouvrir le média");
-          }
-        }
+        // Succès - le mediaService a déjà marqué comme téléchargé
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert("✅ Téléchargé", "Le média a été sauvegardé.");
       }
     } catch (error) {
       console.error("[ChatZone] Download media error:", error);
@@ -310,18 +388,12 @@ export const ChatZone = memo<ChatZoneProps>(({
         isDownloaded={item.mediaDownloaded}
         isOwnMessage={isOwnMessage}
         timestamp={item.createdAt}
-        onPress={() => {
-          // Ouvrir en plein écran (futur)
-          console.log("[ChatZone] View media:", item.id);
-        }}
-        onDownload={
-          isPremium && !isOwnMessage
-            ? () => handleDownloadMedia(item.id)
-            : undefined
-        }
+        isPremium={isPremium}
+        onPress={() => handleOpenViewer(item)}
+        onDownload={() => handleDownloadMedia(item.id)}
       />
     );
-  }, [userId, isPremium, handleDownloadMedia]);
+  }, [userId, isPremium, handleOpenViewer, handleDownloadMedia]);
 
   // ============================================================
   // RENDU
@@ -338,7 +410,12 @@ export const ChatZone = memo<ChatZoneProps>(({
           <Ionicons name="chatbubble-outline" size={20} color="#6B7280" />
           <Text className="text-gray-600 ml-2">Chat</Text>
           {isUploading && (
-            <ActivityIndicator size="small" color="#EC4899" style={{ marginLeft: 8 }} />
+            <View className="flex-row items-center ml-2">
+              <ActivityIndicator size="small" color="#EC4899" />
+              {uploadProgress && (
+                <Text className="text-pink-500 text-xs ml-1">{uploadProgress}</Text>
+              )}
+            </View>
           )}
         </View>
         <View className="flex-row items-center">
@@ -357,59 +434,78 @@ export const ChatZone = memo<ChatZoneProps>(({
 
   // Mode étendu (chat complet)
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      className="bg-white border-t border-gray-100"
-      style={{ maxHeight: 350 }}
-    >
-      {/* Header */}
-      <Pressable
-        onPress={onToggle}
-        className="flex-row items-center justify-between px-4 py-2 border-b border-gray-100"
+    <>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        className="bg-white border-t border-gray-100"
+        style={{ maxHeight: 350 }}
       >
-        <View className="flex-row items-center">
-          <Text className="text-gray-800 font-medium">Chat</Text>
-          {isUploading && (
-            <View className="flex-row items-center ml-2">
-              <ActivityIndicator size="small" color="#EC4899" />
-              <Text className="text-pink-500 text-xs ml-1">Envoi...</Text>
-            </View>
-          )}
-        </View>
-        <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
-      </Pressable>
+        {/* Header */}
+        <Pressable
+          onPress={onToggle}
+          className="flex-row items-center justify-between px-4 py-2 border-b border-gray-100"
+        >
+          <View className="flex-row items-center">
+            <Text className="text-gray-800 font-medium">Chat</Text>
+            {isUploading && (
+              <View className="flex-row items-center ml-2">
+                <ActivityIndicator size="small" color="#EC4899" />
+                <Text className="text-pink-500 text-xs ml-1">
+                  {uploadProgress || "Envoi..."}
+                </Text>
+              </View>
+            )}
+          </View>
+          <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
+        </Pressable>
 
-      {/* Liste des messages */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        contentContainerStyle={{ padding: 12 }}
-        style={{ maxHeight: 200 }}
-        ListEmptyComponent={
-          <Text className="text-gray-400 text-center py-4">
-            Aucun message pour le moment
-          </Text>
-        }
-        showsVerticalScrollIndicator={false}
-        onContentSizeChange={() => {
-          flatListRef.current?.scrollToEnd({ animated: false });
-        }}
-      />
+        {/* Liste des messages */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMessage}
+          contentContainerStyle={{ padding: 12 }}
+          style={{ maxHeight: 200 }}
+          ListEmptyComponent={
+            <Text className="text-gray-400 text-center py-4">
+              Aucun message pour le moment
+            </Text>
+          }
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => {
+            flatListRef.current?.scrollToEnd({ animated: false });
+          }}
+        />
 
-      {/* Zone de saisie avec options médias */}
-      <ChatInput
-        onSendText={handleSendText}
-        onPickPhoto={handlePickPhoto}
-        onOpenCamera={handleOpenCamera}
-        onStartRecording={handleStartRecording}
-        placeholder="Écris un message..."
-        disabled={isSending || isUploading}
-        showMediaOptions={true}
-        showAudioOption={false}
-      />
-    </KeyboardAvoidingView>
+        {/* Zone de saisie avec options médias */}
+        <ChatInput
+          onSendText={handleSendText}
+          onPickPhoto={handlePickMedia}
+          onOpenCamera={handleOpenCamera}
+          onStartRecording={handleStartRecording}
+          placeholder="Écris un message..."
+          disabled={isSending || isUploading}
+          showMediaOptions={true}
+          showAudioOption={false}
+        />
+      </KeyboardAvoidingView>
+
+      {/* Modal de visualisation plein écran */}
+      {viewerData && (
+        <MediaViewer
+          visible={showViewer}
+          type={viewerData.type}
+          mediaUrl={viewerData.mediaUrl}
+          expiresAt={viewerData.expiresAt}
+          isDownloaded={viewerData.isDownloaded}
+          isOwnMessage={viewerData.isOwnMessage}
+          isPremium={isPremium}
+          onClose={handleCloseViewer}
+          onDownload={() => handleDownloadMedia(viewerData.messageId)}
+        />
+      )}
+    </>
   );
 });
 

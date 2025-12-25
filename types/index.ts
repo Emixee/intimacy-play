@@ -4,6 +4,7 @@
  * PROMPT 4.3 : Ajout des types pour défis partenaires
  * PROMPT 1.3-v2 : Mise à jour des thèmes basés sur defis_couple_distance_v4.xlsx
  * PROMPT PARTNER-CHALLENGE : Ajout UserChallenge pour stockage modération
+ * PROMPT MEDIA-FIX : Réduction durée média à 2 minutes + nouveaux types viewer
  * 
  * Aligné avec le code existant ET FIRESTORE-SCHEMA.md
  * Compatible avec services/session.service.ts, services/game.service.ts, etc.
@@ -149,8 +150,11 @@ export const MAX_BONUS_CHANGES = 3;
 /** Nombre maximum de parties gratuites par jour */
 export const MAX_FREE_GAMES_PER_DAY = 3;
 
-/** Durée d'expiration des médias (en minutes) */
-export const MEDIA_EXPIRATION_MINUTES = 10;
+/** 
+ * Durée d'expiration des médias (en minutes)
+ * PROMPT MEDIA-FIX : Réduit de 10 à 2 minutes
+ */
+export const MEDIA_EXPIRATION_MINUTES = 2;
 
 /** Durée d'expiration du code de session (en heures) */
 export const SESSION_CODE_EXPIRATION_HOURS = 24;
@@ -508,6 +512,28 @@ export interface CreateMessageData {
   type: MessageType;
   content: string;
   mediaUri?: string;
+}
+
+// ============================================================
+// MEDIA VIEWER TYPES (PROMPT MEDIA-FIX)
+// ============================================================
+
+/**
+ * Média à afficher dans le viewer plein écran
+ */
+export interface MediaViewerData {
+  /** ID du message */
+  messageId: string;
+  /** Type de média */
+  type: MessageType;
+  /** URL du média */
+  mediaUrl: string;
+  /** Date d'expiration */
+  expiresAt: Timestamp | null;
+  /** Média déjà téléchargé */
+  isDownloaded: boolean;
+  /** C'est mon message ? */
+  isOwnMessage: boolean;
 }
 
 // ============================================================
