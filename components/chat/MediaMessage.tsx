@@ -1,11 +1,12 @@
 /**
  * MediaMessage - Message contenant un média (photo, vidéo, audio)
  * 
- * FIX CRASH COMPLET : 
- * - Gestion robuste de timestamp null (serverTimestamp non résolu)
- * - Gestion robuste de expiresAt null
- * - Try-catch sur toutes les conversions de dates
- * - Fallback sur Date.now() si conversion échoue
+ * FIX COMPLET : 
+ * - Gestion robuste de mediaUrl null/undefined
+ * - Affichage placeholder pendant chargement URL
+ * - Retry automatique si URL non disponible
+ * - Logs détaillés pour debug
+ * - Protection timestamps null
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
@@ -49,41 +50,45 @@ interface MediaMessageProps {
 const safeToDate = (
   timestamp: FirebaseFirestoreTypes.Timestamp | Date | null | undefined
 ): Date => {
-  // Si null ou undefined
   if (!timestamp) {
     return new Date();
   }
   
-  // Si c'est déjà une Date
   if (timestamp instanceof Date) {
     return timestamp;
   }
   
-  // Si c'est un objet avec toDate (Firestore Timestamp)
   if (typeof timestamp === "object" && timestamp !== null) {
-    // Vérifier si toDate existe et est une fonction
     if ("toDate" in timestamp && typeof (timestamp as any).toDate === "function") {
       try {
         return (timestamp as any).toDate();
       } catch (error) {
-        console.warn("[MediaMessage] toDate() failed:", error);
         return new Date();
       }
     }
     
-    // Si c'est un objet avec seconds (timestamp brut non résolu)
     if ("seconds" in timestamp && typeof (timestamp as any).seconds === "number") {
       try {
         return new Date((timestamp as any).seconds * 1000);
       } catch (error) {
-        console.warn("[MediaMessage] seconds conversion failed:", error);
         return new Date();
       }
     }
   }
   
-  // Fallback final
   return new Date();
+};
+
+// ============================================================
+// HELPER: Vérifier si une URL est valide
+// ============================================================
+
+const isValidUrl = (url: string | null | undefined): boolean => {
+  if (!url || typeof url !== "string") {
+    return false;
+  }
+  // Vérifier que c'est une URL Firebase Storage valide
+  return url.startsWith("https://") || url.startsWith("http://");
 };
 
 // ============================================================
@@ -103,10 +108,11 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
   onDownload,
 }) => {
   // État commun
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [isExpired, setIsExpired] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   // État audio
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -116,9 +122,18 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
 
   // Refs
   const soundRef = useRef<Audio.Sound | null>(null);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // URL valide ?
+  const hasValidUrl = isValidUrl(mediaUrl);
+
+  // Log pour debug
+  useEffect(() => {
+    console.log(`[MediaMessage] Render - type: ${type}, hasUrl: ${hasValidUrl}, url: ${mediaUrl?.substring(0, 50) || 'null'}`);
+  }, [type, mediaUrl, hasValidUrl]);
 
   // ============================================================
-  // CLEANUP AUDIO
+  // CLEANUP
   // ============================================================
 
   useEffect(() => {
@@ -126,15 +141,39 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch(() => {});
       }
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
     };
   }, []);
 
   // ============================================================
-  // TIMER D'EXPIRATION (avec protection null complète)
+  // RETRY SI URL PAS ENCORE DISPONIBLE
   // ============================================================
 
   useEffect(() => {
-    // Si pas d'expiration définie, pas de timer
+    // Si pas d'URL valide et moins de 5 retries, réessayer
+    if (!hasValidUrl && retryCount < 5) {
+      console.log(`[MediaMessage] URL not ready, retry ${retryCount + 1}/5 in 1s`);
+      retryTimeoutRef.current = setTimeout(() => {
+        setRetryCount(prev => prev + 1);
+      }, 1000);
+    }
+  }, [hasValidUrl, retryCount]);
+
+  // Reset retry count quand l'URL devient valide
+  useEffect(() => {
+    if (hasValidUrl && retryCount > 0) {
+      console.log(`[MediaMessage] URL now valid after ${retryCount} retries`);
+      setRetryCount(0);
+    }
+  }, [hasValidUrl]);
+
+  // ============================================================
+  // TIMER D'EXPIRATION
+  // ============================================================
+
+  useEffect(() => {
     if (!expiresAt) {
       setRemainingSeconds(0);
       setIsExpired(false);
@@ -149,7 +188,6 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
         setRemainingSeconds(Math.max(0, seconds));
         setIsExpired(seconds <= 0);
       } catch (error) {
-        console.warn("[MediaMessage] Timer update error:", error);
         setRemainingSeconds(0);
         setIsExpired(false);
       }
@@ -162,7 +200,7 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
   }, [expiresAt]);
 
   // ============================================================
-  // FORMATAGE (avec protection)
+  // FORMATAGE
   // ============================================================
 
   const formatTimeRemaining = (): string => {
@@ -179,11 +217,8 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // Conversion sécurisée du timestamp pour l'affichage de l'heure
   const messageDate = safeToDate(timestamp);
   const timeString = format(messageDate, "HH:mm", { locale: fr });
-
-  // Couleur du timer selon le temps restant
   const isExpiringSoon = remainingSeconds > 0 && remainingSeconds <= 30;
 
   // ============================================================
@@ -191,6 +226,11 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
   // ============================================================
 
   const handlePress = useCallback(() => {
+    if (!hasValidUrl) {
+      Alert.alert("Chargement", "Le média est en cours de chargement...");
+      return;
+    }
+    
     if (isExpired) {
       Alert.alert("Média expiré", "Ce média n'est plus disponible.");
       return;
@@ -202,10 +242,15 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
     }
     
     onPress?.();
-  }, [isExpired, type, onPress]);
+  }, [hasValidUrl, isExpired, type, onPress]);
 
   const handleLongPress = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    if (!hasValidUrl) {
+      Alert.alert("Chargement", "Le média est en cours de chargement...");
+      return;
+    }
 
     if (isExpired) {
       Alert.alert("Média expiré", "Ce média n'est plus disponible.");
@@ -253,14 +298,14 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
         },
       ]
     );
-  }, [isExpired, isOwnMessage, isPremium, isDownloaded, onDownload]);
+  }, [hasValidUrl, isExpired, isOwnMessage, isPremium, isDownloaded, onDownload]);
 
   // ============================================================
   // LECTURE AUDIO
   // ============================================================
 
   const toggleAudioPlayback = async () => {
-    if (!mediaUrl || isExpired) return;
+    if (!mediaUrl || !hasValidUrl || isExpired) return;
 
     try {
       if (soundRef.current) {
@@ -317,7 +362,18 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
   };
 
   // ============================================================
-  // RENDU MÉDIA EXPIRÉ
+  // RENDU: PLACEHOLDER (URL pas encore prête)
+  // ============================================================
+
+  const renderLoadingPlaceholder = () => (
+    <View className="w-48 h-48 bg-gray-100 rounded-xl items-center justify-center">
+      <ActivityIndicator size="large" color="#EC4899" />
+      <Text className="text-gray-500 text-xs mt-2">Chargement...</Text>
+    </View>
+  );
+
+  // ============================================================
+  // RENDU: MÉDIA EXPIRÉ
   // ============================================================
 
   const renderExpiredMedia = () => (
@@ -328,10 +384,15 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
   );
 
   // ============================================================
-  // RENDU MESSAGE PHOTO
+  // RENDU: MESSAGE PHOTO
   // ============================================================
 
   const renderPhotoMessage = () => {
+    // Si pas d'URL valide, afficher le placeholder
+    if (!hasValidUrl) {
+      return renderLoadingPlaceholder();
+    }
+
     const imageSource = thumbnailUrl || mediaUrl;
 
     return (
@@ -347,7 +408,10 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
             source={{ uri: imageSource }}
             className="w-48 h-48 rounded-xl"
             resizeMode="cover"
-            onError={() => setImageError(true)}
+            onError={(e) => {
+              console.error("[MediaMessage] Image load error:", e.nativeEvent.error);
+              setImageError(true);
+            }}
             onLoadStart={() => setIsLoading(true)}
             onLoadEnd={() => setIsLoading(false)}
           />
@@ -360,7 +424,7 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
           </View>
         )}
 
-        {isLoading && (
+        {isLoading && !imageError && (
           <View className="absolute inset-0 bg-black/30 rounded-xl items-center justify-center">
             <ActivityIndicator color="white" size="large" />
           </View>
@@ -397,10 +461,15 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
   };
 
   // ============================================================
-  // RENDU MESSAGE VIDÉO
+  // RENDU: MESSAGE VIDÉO
   // ============================================================
 
   const renderVideoMessage = () => {
+    // Si pas d'URL valide, afficher le placeholder
+    if (!hasValidUrl) {
+      return renderLoadingPlaceholder();
+    }
+
     return (
       <TouchableOpacity
         onPress={handlePress}
@@ -409,14 +478,15 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
         activeOpacity={0.9}
         className="relative"
       >
-        {thumbnailUrl ? (
+        {thumbnailUrl && isValidUrl(thumbnailUrl) ? (
           <Image
             source={{ uri: thumbnailUrl }}
             className="w-48 h-48 rounded-xl"
             resizeMode="cover"
+            onError={() => console.log("[MediaMessage] Thumbnail load error")}
           />
         ) : mediaUrl ? (
-          <View className="w-48 h-48 rounded-xl overflow-hidden">
+          <View className="w-48 h-48 rounded-xl overflow-hidden bg-gray-800">
             <Video
               source={{ uri: mediaUrl }}
               style={{ width: 192, height: 192 }}
@@ -424,7 +494,14 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
               shouldPlay={false}
               isMuted
               onLoadStart={() => setIsLoading(true)}
-              onLoad={() => setIsLoading(false)}
+              onLoad={() => {
+                console.log("[MediaMessage] Video loaded successfully");
+                setIsLoading(false);
+              }}
+              onError={(error) => {
+                console.error("[MediaMessage] Video load error:", error);
+                setIsLoading(false);
+              }}
             />
           </View>
         ) : (
@@ -473,11 +550,14 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
   };
 
   // ============================================================
-  // RENDU MESSAGE AUDIO
+  // RENDU: MESSAGE AUDIO
   // ============================================================
 
   const renderAudioMessage = () => {
     const progress = playbackDuration > 0 ? (playbackPosition / playbackDuration) * 100 : 0;
+
+    // Si pas d'URL valide, afficher un état de chargement
+    const isUrlLoading = !hasValidUrl;
 
     return (
       <TouchableOpacity
@@ -497,7 +577,7 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
               ${isOwnMessage ? "bg-white/20" : "bg-pink-100"}
             `}
           >
-            {isLoading ? (
+            {isLoading || isUrlLoading ? (
               <ActivityIndicator
                 color={isOwnMessage ? "white" : "#EC4899"}
                 size="small"
@@ -532,7 +612,7 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
                   isOwnMessage ? "text-white/70" : "text-gray-500"
                 }`}
               >
-                {formatAudioDuration(playbackPosition)}
+                {isUrlLoading ? "..." : formatAudioDuration(playbackPosition)}
               </Text>
               <Text
                 className={`text-xs ${
