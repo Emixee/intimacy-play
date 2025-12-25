@@ -13,7 +13,6 @@ import { Stack, SplashScreen } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View, Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import * as NavigationBar from "expo-navigation-bar";
 import { useAuthStore, initializeAuthListeners } from "../stores/authStore";
 import { LoadingScreen } from "../components/ui/LoadingSpinner";
 
@@ -29,11 +28,15 @@ try {
 /**
  * Configure le mode immersif Android
  * Masque la barre de navigation pour une expérience plein écran
+ * Import dynamique pour éviter le crash si le module natif n'est pas disponible
  */
 const setupImmersiveMode = async (): Promise<void> => {
   if (Platform.OS !== "android") return;
 
   try {
+    // Import dynamique pour éviter le crash au chargement
+    const NavigationBar = await import("expo-navigation-bar");
+    
     // Masquer la barre de navigation
     await NavigationBar.setVisibilityAsync("hidden");
     
@@ -47,6 +50,8 @@ const setupImmersiveMode = async (): Promise<void> => {
     await NavigationBar.setPositionAsync("absolute");
   } catch (error) {
     // Ignorer silencieusement les erreurs de navigation bar
+    // Le module natif peut ne pas être disponible
+    console.log("NavigationBar non disponible:", error);
   }
 };
 
