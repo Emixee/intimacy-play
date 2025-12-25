@@ -1,14 +1,14 @@
 /**
  * MediaMessage - Message contenant un média (photo, vidéo, audio)
  * 
- * PROMPT MEDIA-FIX : Améliorations
- * - Appui long pour télécharger
- * - Meilleur affichage vidéos
- * - Timer plus visible
- * - Gestion des erreurs améliorée
+ * PROMPT AUDIO : Ajout de la lecture audio avec :
+ * - Barre de progression
+ * - Bouton play/pause
+ * - Affichage durée
+ * - Timer d'expiration
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Video, ResizeMode, AVPlaybackStatus } from "expo-av";
+import { Video, ResizeMode, Audio, AVPlaybackStatus } from "expo-av";
 import { format, differenceInSeconds } from "date-fns";
 import { fr } from "date-fns/locale";
 import * as Haptics from "expo-haptics";
@@ -68,11 +68,33 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
   onPress,
   onDownload,
 }) => {
-  // État
+  // État commun
   const [isLoading, setIsLoading] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [isExpired, setIsExpired] = useState(false);
+
+  // État audio
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackPosition, setPlaybackPosition] = useState(0);
+  const [playbackDuration, setPlaybackDuration] = useState(0);
+
+  // Refs
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  // ============================================================
+  // CLEANUP AUDIO
+  // ============================================================
+
+  useEffect(() => {
+    return () => {
+      // Cleanup sound on unmount
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
 
   // ============================================================
   // TIMER D'EXPIRATION
@@ -104,6 +126,13 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const formatAudioDuration = (ms: number): string => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
   // Convertir le timestamp
   const messageDate = timestamp instanceof Date 
     ? timestamp 
@@ -122,11 +151,17 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
       Alert.alert("Média expiré", "Ce média n'est plus disponible.");
       return;
     }
+    
+    // Pour l'audio, on toggle la lecture
+    if (type === "audio") {
+      toggleAudioPlayback();
+      return;
+    }
+    
     onPress?.();
-  }, [isExpired, onPress]);
+  }, [isExpired, type, onPress]);
 
   const handleLongPress = useCallback(async () => {
-    // Haptic feedback
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     if (isExpired) {
@@ -145,7 +180,6 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
         "Le téléchargement des médias est réservé aux membres Premium.",
         [
           { text: "OK", style: "cancel" },
-          { text: "Devenir Premium", onPress: () => {} }, // TODO: navigation premium
         ]
       );
       return;
@@ -158,7 +192,6 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
 
     if (!onDownload) return;
 
-    // Afficher confirmation
     Alert.alert(
       "Télécharger le média ?",
       "Le média sera sauvegardé sur ton appareil.",
@@ -178,6 +211,71 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
       ]
     );
   }, [isExpired, isOwnMessage, isPremium, isDownloaded, onDownload]);
+
+  // ============================================================
+  // LECTURE AUDIO
+  // ============================================================
+
+  const toggleAudioPlayback = async () => {
+    if (!mediaUrl || isExpired) return;
+
+    try {
+      // Si déjà chargé, toggle play/pause
+      if (soundRef.current) {
+        const status = await soundRef.current.getStatusAsync();
+        if (status.isLoaded) {
+          if (status.isPlaying) {
+            await soundRef.current.pauseAsync();
+            setIsPlaying(false);
+          } else {
+            await soundRef.current.playAsync();
+            setIsPlaying(true);
+          }
+          return;
+        }
+      }
+
+      // Charger et jouer
+      setIsLoading(true);
+      
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: mediaUrl },
+        { shouldPlay: true },
+        onPlaybackStatusUpdate
+      );
+
+      soundRef.current = newSound;
+      setSound(newSound);
+      setIsPlaying(true);
+      setIsLoading(false);
+
+    } catch (error) {
+      console.error("[MediaMessage] Audio playback error:", error);
+      Alert.alert("Erreur", "Impossible de lire l'audio");
+      setIsLoading(false);
+    }
+  };
+
+  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (!status.isLoaded) return;
+
+    setPlaybackPosition(status.positionMillis || 0);
+    setPlaybackDuration(status.durationMillis || 0);
+    setIsPlaying(status.isPlaying);
+
+    // Fin de lecture
+    if (status.didJustFinish) {
+      setIsPlaying(false);
+      setPlaybackPosition(0);
+      // Remettre au début
+      soundRef.current?.setPositionAsync(0);
+    }
+  };
 
   // ============================================================
   // RENDU MÉDIA EXPIRÉ
@@ -251,13 +349,11 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
           </View>
         )}
 
-        {/* Hint appui long (pour les messages reçus non téléchargés) */}
+        {/* Hint appui long */}
         {!isOwnMessage && !isDownloaded && isPremium && !isLoading && (
           <View className="absolute bottom-2 left-2 right-2">
             <View className="bg-black/60 px-2 py-1 rounded-full self-center">
-              <Text className="text-white text-xs">
-                Appui long pour 💾
-              </Text>
+              <Text className="text-white text-xs">Appui long pour 💾</Text>
             </View>
           </View>
         )}
@@ -347,10 +443,12 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
   };
 
   // ============================================================
-  // RENDU MESSAGE AUDIO
+  // RENDU MESSAGE AUDIO (avec lecteur)
   // ============================================================
 
   const renderAudioMessage = () => {
+    const progress = playbackDuration > 0 ? (playbackPosition / playbackDuration) * 100 : 0;
+
     return (
       <TouchableOpacity
         onPress={handlePress}
@@ -358,61 +456,96 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
         delayLongPress={500}
         activeOpacity={0.8}
         className={`
-          flex-row items-center px-4 py-3 rounded-2xl min-w-[200px]
+          px-4 py-3 rounded-2xl min-w-[220px] max-w-[280px]
           ${isOwnMessage ? "bg-pink-500" : "bg-white border border-gray-100"}
         `}
       >
-        <View
-          className={`
-            w-10 h-10 rounded-full items-center justify-center
-            ${isOwnMessage ? "bg-white/20" : "bg-pink-100"}
-          `}
-        >
-          {isLoading ? (
-            <ActivityIndicator
-              color={isOwnMessage ? "white" : "#EC4899"}
-              size="small"
-            />
-          ) : (
-            <Ionicons
-              name="play"
-              size={20}
-              color={isOwnMessage ? "white" : "#EC4899"}
-            />
-          )}
-        </View>
-
-        <View className="flex-1 ml-3">
-          <Text
-            className={`font-medium ${isOwnMessage ? "text-white" : "text-gray-800"}`}
+        <View className="flex-row items-center">
+          {/* Bouton play/pause */}
+          <View
+            className={`
+              w-11 h-11 rounded-full items-center justify-center
+              ${isOwnMessage ? "bg-white/20" : "bg-pink-100"}
+            `}
           >
-            Message vocal
-          </Text>
-          {expiresAt && !isExpired && (
-            <View className="flex-row items-center mt-0.5">
-              <Ionicons
-                name="time-outline"
-                size={10}
-                color={isOwnMessage ? "rgba(255,255,255,0.7)" : "#9CA3AF"}
+            {isLoading ? (
+              <ActivityIndicator
+                color={isOwnMessage ? "white" : "#EC4899"}
+                size="small"
               />
+            ) : (
+              <Ionicons
+                name={isPlaying ? "pause" : "play"}
+                size={22}
+                color={isOwnMessage ? "white" : "#EC4899"}
+                style={{ marginLeft: isPlaying ? 0 : 2 }}
+              />
+            )}
+          </View>
+
+          {/* Barre de progression et durée */}
+          <View className="flex-1 ml-3">
+            {/* Barre de progression */}
+            <View
+              className={`h-1 rounded-full overflow-hidden ${
+                isOwnMessage ? "bg-white/30" : "bg-gray-200"
+              }`}
+            >
+              <View
+                className={`h-full rounded-full ${
+                  isOwnMessage ? "bg-white" : "bg-pink-500"
+                }`}
+                style={{ width: `${progress}%` }}
+              />
+            </View>
+
+            {/* Durée */}
+            <View className="flex-row justify-between mt-1">
               <Text
-                className={`text-xs ml-1 ${
-                  isExpiringSoon
-                    ? "text-red-300"
-                    : isOwnMessage
-                    ? "text-white/70"
-                    : "text-gray-500"
+                className={`text-xs ${
+                  isOwnMessage ? "text-white/70" : "text-gray-500"
                 }`}
               >
-                {formatTimeRemaining()}
+                {formatAudioDuration(playbackPosition)}
+              </Text>
+              <Text
+                className={`text-xs ${
+                  isOwnMessage ? "text-white/70" : "text-gray-500"
+                }`}
+              >
+                {playbackDuration > 0
+                  ? formatAudioDuration(playbackDuration)
+                  : "0:00"}
               </Text>
             </View>
-          )}
+          </View>
         </View>
+
+        {/* Timer d'expiration */}
+        {expiresAt && !isExpired && (
+          <View className="flex-row items-center mt-2">
+            <Ionicons
+              name="time-outline"
+              size={10}
+              color={isExpiringSoon ? "#EF4444" : isOwnMessage ? "rgba(255,255,255,0.6)" : "#9CA3AF"}
+            />
+            <Text
+              className={`text-xs ml-1 ${
+                isExpiringSoon
+                  ? "text-red-400"
+                  : isOwnMessage
+                  ? "text-white/60"
+                  : "text-gray-400"
+              }`}
+            >
+              Expire dans {formatTimeRemaining()}
+            </Text>
+          </View>
+        )}
 
         {/* Badge téléchargé */}
         {isDownloaded && (
-          <View className="ml-2">
+          <View className="absolute top-2 right-2">
             <Ionicons
               name="checkmark-circle"
               size={16}

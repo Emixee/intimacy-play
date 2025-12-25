@@ -1,17 +1,16 @@
 /**
  * ChatZone - Zone de chat avec support médias éphémères
  * 
- * PROMPT MEDIA-FIX : Corrections et améliorations
- * - Fix bug crash après envoi photo (gestion d'erreurs robuste)
- * - Fix vidéos non fonctionnelles
- * - Intégration MediaViewer pour affichage plein écran
- * - Téléchargement via appui long
- * - Durée média réduite à 2 min
+ * PROMPT AUDIO : Support complet des messages vocaux
+ * - Enregistrement audio via ChatInput
+ * - Lecture audio dans MediaMessage
+ * - Affichage plein écran dans MediaViewer
  * 
  * Fonctionnalités :
  * - Messages texte
  * - Envoi de photos (galerie ou caméra)
  * - Envoi de vidéos
+ * - Envoi de messages vocaux
  * - Médias éphémères (expiration 2 min)
  * - Téléchargement médias (Premium) via appui long
  */
@@ -141,7 +140,7 @@ export const ChatZone = memo<ChatZoneProps>(({
   }, [isSending, sessionCode, userId, userGender]);
 
   // ============================================================
-  // ENVOI DE MÉDIAS (FIX: Gestion d'erreurs robuste)
+  // ENVOI DE MÉDIAS (Photo/Vidéo/Audio)
   // ============================================================
 
   const sendMedia = useCallback(async (uri: string, type: MessageType) => {
@@ -155,15 +154,21 @@ export const ChatZone = memo<ChatZoneProps>(({
     }
 
     setIsUploading(true);
-    setUploadProgress("Préparation...");
+    
+    // Message de progression selon le type
+    if (type === "audio") {
+      setUploadProgress("Envoi audio...");
+    } else if (type === "video") {
+      setUploadProgress("Envoi vidéo...");
+    } else {
+      setUploadProgress("Envoi photo...");
+    }
 
     try {
       console.log(`[ChatZone] Sending ${type}: ${uri.substring(0, 50)}...`);
 
       // Vérifier que l'URI est correctement formatée
       const cleanUri = uri.startsWith("file://") ? uri : `file://${uri}`;
-
-      setUploadProgress("Envoi en cours...");
 
       const result = await mediaService.sendMediaMessage(
         sessionCode,
@@ -183,7 +188,6 @@ export const ChatZone = memo<ChatZoneProps>(({
     } catch (error: any) {
       console.error("[ChatZone] Send media error:", error);
       
-      // Message d'erreur plus explicite
       let errorMessage = "Impossible d'envoyer le média";
       if (error.code === "storage/unknown") {
         errorMessage = "Erreur de connexion. Vérifie ta connexion internet.";
@@ -201,7 +205,16 @@ export const ChatZone = memo<ChatZoneProps>(({
   }, [isUploading, sessionCode, userId, userGender]);
 
   // ============================================================
-  // PICKERS MÉDIAS (FIX: Meilleure gestion vidéo)
+  // ENVOI D'AUDIO
+  // ============================================================
+
+  const handleSendAudio = useCallback(async (uri: string, durationMs: number) => {
+    console.log(`[ChatZone] Sending audio: ${uri.substring(0, 50)}..., duration: ${durationMs}ms`);
+    await sendMedia(uri, "audio");
+  }, [sendMedia]);
+
+  // ============================================================
+  // PICKERS MÉDIAS
   // ============================================================
 
   // Sélection depuis la galerie (photo ou vidéo)
@@ -222,7 +235,7 @@ export const ChatZone = memo<ChatZoneProps>(({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsEditing: false,
         quality: 0.8,
-        videoMaxDuration: 60, // Max 60 secondes
+        videoMaxDuration: 60,
         videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
       });
 
@@ -237,7 +250,7 @@ export const ChatZone = memo<ChatZoneProps>(({
           mediaType = "video";
         } else if (asset.mimeType?.startsWith("video/")) {
           mediaType = "video";
-        } else if (asset.uri.match(/\.(mp4|mov|avi|webm|mkv)$/i)) {
+        } else if (asset.uri.match(/\.(mp4|mov|avi|webm|mkv|3gp)$/i)) {
           mediaType = "video";
         } else {
           mediaType = "photo";
@@ -285,7 +298,7 @@ export const ChatZone = memo<ChatZoneProps>(({
           mediaType = "video";
         } else if (asset.mimeType?.startsWith("video/")) {
           mediaType = "video";
-        } else if (asset.uri.match(/\.(mp4|mov|avi|webm|mkv)$/i)) {
+        } else if (asset.uri.match(/\.(mp4|mov|avi|webm|mkv|3gp)$/i)) {
           mediaType = "video";
         } else {
           mediaType = "photo";
@@ -299,14 +312,6 @@ export const ChatZone = memo<ChatZoneProps>(({
       Alert.alert("Erreur", "Impossible d'accéder à la caméra");
     }
   }, [sendMedia]);
-
-  // Enregistrement audio (placeholder)
-  const handleStartRecording = useCallback(() => {
-    Alert.alert(
-      "Bientôt disponible",
-      "L'enregistrement audio sera disponible dans une prochaine version."
-    );
-  }, []);
 
   // ============================================================
   // AFFICHAGE PLEIN ÉCRAN
@@ -349,7 +354,6 @@ export const ChatZone = memo<ChatZoneProps>(({
       }
 
       if (result.data && result.data.url) {
-        // Succès - le mediaService a déjà marqué comme téléchargé
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert("✅ Téléchargé", "Le média a été sauvegardé.");
       }
@@ -438,7 +442,7 @@ export const ChatZone = memo<ChatZoneProps>(({
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="bg-white border-t border-gray-100"
-        style={{ maxHeight: 350 }}
+        style={{ maxHeight: 400 }}
       >
         {/* Header */}
         <Pressable
@@ -466,7 +470,7 @@ export const ChatZone = memo<ChatZoneProps>(({
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={{ padding: 12 }}
-          style={{ maxHeight: 200 }}
+          style={{ maxHeight: 220 }}
           ListEmptyComponent={
             <Text className="text-gray-400 text-center py-4">
               Aucun message pour le moment
@@ -478,16 +482,16 @@ export const ChatZone = memo<ChatZoneProps>(({
           }}
         />
 
-        {/* Zone de saisie avec options médias */}
+        {/* Zone de saisie avec options médias et audio */}
         <ChatInput
           onSendText={handleSendText}
           onPickPhoto={handlePickMedia}
           onOpenCamera={handleOpenCamera}
-          onStartRecording={handleStartRecording}
+          onSendAudio={handleSendAudio}
           placeholder="Écris un message..."
           disabled={isSending || isUploading}
           showMediaOptions={true}
-          showAudioOption={false}
+          showAudioOption={true}
         />
       </KeyboardAvoidingView>
 
