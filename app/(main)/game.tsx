@@ -5,6 +5,8 @@
  * - Composants extraits vers components/game/
  * - Meilleure performance avec React.memo et useMemo
  * - Code plus léger (~300 lignes vs 1500)
+ * 
+ * PROMPT 10.2 : Ajout isPremium au ChatZone pour médias
  */
 
 import React, { useState, useCallback, useMemo, useEffect } from "react";
@@ -455,6 +457,7 @@ export default function GameScreen() {
           expanded={chatExpanded}
           onToggle={() => setChatExpanded(!chatExpanded)}
           unreadCount={unreadCount}
+          isPremium={isPremium}
         />
       )}
 
