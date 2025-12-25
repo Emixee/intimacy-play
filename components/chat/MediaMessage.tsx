@@ -1,11 +1,11 @@
 /**
  * MediaMessage - Message contenant un média (photo, vidéo, audio)
  * 
- * PROMPT AUDIO : Ajout de la lecture audio avec :
- * - Barre de progression
- * - Bouton play/pause
- * - Affichage durée
- * - Timer d'expiration
+ * FIX CRASH COMPLET : 
+ * - Gestion robuste de timestamp null (serverTimestamp non résolu)
+ * - Gestion robuste de expiresAt null
+ * - Try-catch sur toutes les conversions de dates
+ * - Fallback sur Date.now() si conversion échoue
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
@@ -30,27 +30,61 @@ import type { MessageType } from "../../types";
 // ============================================================
 
 interface MediaMessageProps {
-  /** Type de média */
   type: MessageType;
-  /** URL du média (Firebase Storage) */
   mediaUrl: string | null;
-  /** URL de la miniature (pour photos/vidéos) */
   thumbnailUrl?: string | null;
-  /** Date d'expiration du média */
-  expiresAt: FirebaseFirestoreTypes.Timestamp | null;
-  /** Média déjà téléchargé ? */
+  expiresAt: FirebaseFirestoreTypes.Timestamp | null | undefined;
   isDownloaded: boolean;
-  /** C'est mon message ? */
   isOwnMessage: boolean;
-  /** Timestamp du message */
-  timestamp: FirebaseFirestoreTypes.Timestamp | Date;
-  /** User is Premium */
+  timestamp: FirebaseFirestoreTypes.Timestamp | Date | null | undefined;
   isPremium?: boolean;
-  /** Callback au clic sur le média (ouvrir en grand) */
   onPress?: () => void;
-  /** Callback pour télécharger le média (appui long) */
   onDownload?: () => Promise<void>;
 }
+
+// ============================================================
+// HELPER: Conversion sécurisée de timestamp
+// ============================================================
+
+const safeToDate = (
+  timestamp: FirebaseFirestoreTypes.Timestamp | Date | null | undefined
+): Date => {
+  // Si null ou undefined
+  if (!timestamp) {
+    return new Date();
+  }
+  
+  // Si c'est déjà une Date
+  if (timestamp instanceof Date) {
+    return timestamp;
+  }
+  
+  // Si c'est un objet avec toDate (Firestore Timestamp)
+  if (typeof timestamp === "object" && timestamp !== null) {
+    // Vérifier si toDate existe et est une fonction
+    if ("toDate" in timestamp && typeof (timestamp as any).toDate === "function") {
+      try {
+        return (timestamp as any).toDate();
+      } catch (error) {
+        console.warn("[MediaMessage] toDate() failed:", error);
+        return new Date();
+      }
+    }
+    
+    // Si c'est un objet avec seconds (timestamp brut non résolu)
+    if ("seconds" in timestamp && typeof (timestamp as any).seconds === "number") {
+      try {
+        return new Date((timestamp as any).seconds * 1000);
+      } catch (error) {
+        console.warn("[MediaMessage] seconds conversion failed:", error);
+        return new Date();
+      }
+    }
+  }
+  
+  // Fallback final
+  return new Date();
+};
 
 // ============================================================
 // COMPOSANT
@@ -89,24 +123,36 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
 
   useEffect(() => {
     return () => {
-      // Cleanup sound on unmount
       if (soundRef.current) {
-        soundRef.current.unloadAsync();
+        soundRef.current.unloadAsync().catch(() => {});
       }
     };
   }, []);
 
   // ============================================================
-  // TIMER D'EXPIRATION
+  // TIMER D'EXPIRATION (avec protection null complète)
   // ============================================================
 
   useEffect(() => {
-    if (!expiresAt) return;
+    // Si pas d'expiration définie, pas de timer
+    if (!expiresAt) {
+      setRemainingSeconds(0);
+      setIsExpired(false);
+      return;
+    }
 
     const updateTimer = () => {
-      const seconds = differenceInSeconds(expiresAt.toDate(), new Date());
-      setRemainingSeconds(Math.max(0, seconds));
-      setIsExpired(seconds <= 0);
+      try {
+        const expirationDate = safeToDate(expiresAt);
+        const now = new Date();
+        const seconds = differenceInSeconds(expirationDate, now);
+        setRemainingSeconds(Math.max(0, seconds));
+        setIsExpired(seconds <= 0);
+      } catch (error) {
+        console.warn("[MediaMessage] Timer update error:", error);
+        setRemainingSeconds(0);
+        setIsExpired(false);
+      }
     };
 
     updateTimer();
@@ -116,7 +162,7 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
   }, [expiresAt]);
 
   // ============================================================
-  // FORMATAGE
+  // FORMATAGE (avec protection)
   // ============================================================
 
   const formatTimeRemaining = (): string => {
@@ -133,10 +179,8 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // Convertir le timestamp
-  const messageDate = timestamp instanceof Date 
-    ? timestamp 
-    : timestamp.toDate();
+  // Conversion sécurisée du timestamp pour l'affichage de l'heure
+  const messageDate = safeToDate(timestamp);
   const timeString = format(messageDate, "HH:mm", { locale: fr });
 
   // Couleur du timer selon le temps restant
@@ -152,7 +196,6 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
       return;
     }
     
-    // Pour l'audio, on toggle la lecture
     if (type === "audio") {
       toggleAudioPlayback();
       return;
@@ -178,9 +221,7 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
       Alert.alert(
         "Fonctionnalité Premium 👑",
         "Le téléchargement des médias est réservé aux membres Premium.",
-        [
-          { text: "OK", style: "cancel" },
-        ]
+        [{ text: "OK", style: "cancel" }]
       );
       return;
     }
@@ -203,6 +244,8 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
             setIsLoading(true);
             try {
               await onDownload();
+            } catch (error) {
+              console.error("[MediaMessage] Download error:", error);
             } finally {
               setIsLoading(false);
             }
@@ -220,7 +263,6 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
     if (!mediaUrl || isExpired) return;
 
     try {
-      // Si déjà chargé, toggle play/pause
       if (soundRef.current) {
         const status = await soundRef.current.getStatusAsync();
         if (status.isLoaded) {
@@ -235,7 +277,6 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
         }
       }
 
-      // Charger et jouer
       setIsLoading(true);
       
       await Audio.setAudioModeAsync({
@@ -268,11 +309,9 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
     setPlaybackDuration(status.durationMillis || 0);
     setIsPlaying(status.isPlaying);
 
-    // Fin de lecture
     if (status.didJustFinish) {
       setIsPlaying(false);
       setPlaybackPosition(0);
-      // Remettre au début
       soundRef.current?.setPositionAsync(0);
     }
   };
@@ -321,15 +360,13 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
           </View>
         )}
 
-        {/* Loading overlay */}
         {isLoading && (
           <View className="absolute inset-0 bg-black/30 rounded-xl items-center justify-center">
             <ActivityIndicator color="white" size="large" />
           </View>
         )}
 
-        {/* Badge expiration */}
-        {expiresAt && !isExpired && (
+        {expiresAt && !isExpired && remainingSeconds > 0 && (
           <View
             className={`absolute top-2 right-2 px-2 py-1 rounded-full flex-row items-center ${
               isExpiringSoon ? "bg-red-500" : "bg-black/60"
@@ -342,14 +379,12 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
           </View>
         )}
 
-        {/* Badge téléchargé */}
         {isDownloaded && (
           <View className="absolute top-2 left-2 bg-green-500 px-2 py-1 rounded-full">
             <Ionicons name="checkmark" size={12} color="white" />
           </View>
         )}
 
-        {/* Hint appui long */}
         {!isOwnMessage && !isDownloaded && isPremium && !isLoading && (
           <View className="absolute bottom-2 left-2 right-2">
             <View className="bg-black/60 px-2 py-1 rounded-full self-center">
@@ -398,28 +433,24 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
           </View>
         )}
 
-        {/* Loading overlay */}
         {isLoading && (
           <View className="absolute inset-0 bg-black/30 rounded-xl items-center justify-center">
             <ActivityIndicator color="white" size="large" />
           </View>
         )}
 
-        {/* Bouton play overlay */}
         <View className="absolute inset-0 items-center justify-center">
           <View className="w-14 h-14 bg-white/90 rounded-full items-center justify-center shadow-lg">
             <Ionicons name="play" size={28} color="#EC4899" style={{ marginLeft: 2 }} />
           </View>
         </View>
 
-        {/* Badge vidéo */}
         <View className="absolute bottom-2 left-2 bg-black/60 px-2 py-1 rounded-full flex-row items-center">
           <Ionicons name="videocam" size={12} color="white" />
           <Text className="text-white text-xs ml-1">Vidéo</Text>
         </View>
 
-        {/* Badge expiration */}
-        {expiresAt && !isExpired && (
+        {expiresAt && !isExpired && remainingSeconds > 0 && (
           <View
             className={`absolute top-2 right-2 px-2 py-1 rounded-full flex-row items-center ${
               isExpiringSoon ? "bg-red-500" : "bg-black/60"
@@ -432,7 +463,6 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
           </View>
         )}
 
-        {/* Badge téléchargé */}
         {isDownloaded && (
           <View className="absolute top-2 left-2 bg-green-500 px-2 py-1 rounded-full">
             <Ionicons name="checkmark" size={12} color="white" />
@@ -443,7 +473,7 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
   };
 
   // ============================================================
-  // RENDU MESSAGE AUDIO (avec lecteur)
+  // RENDU MESSAGE AUDIO
   // ============================================================
 
   const renderAudioMessage = () => {
@@ -461,7 +491,6 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
         `}
       >
         <View className="flex-row items-center">
-          {/* Bouton play/pause */}
           <View
             className={`
               w-11 h-11 rounded-full items-center justify-center
@@ -483,9 +512,7 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
             )}
           </View>
 
-          {/* Barre de progression et durée */}
           <View className="flex-1 ml-3">
-            {/* Barre de progression */}
             <View
               className={`h-1 rounded-full overflow-hidden ${
                 isOwnMessage ? "bg-white/30" : "bg-gray-200"
@@ -499,7 +526,6 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
               />
             </View>
 
-            {/* Durée */}
             <View className="flex-row justify-between mt-1">
               <Text
                 className={`text-xs ${
@@ -521,8 +547,7 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
           </View>
         </View>
 
-        {/* Timer d'expiration */}
-        {expiresAt && !isExpired && (
+        {expiresAt && !isExpired && remainingSeconds > 0 && (
           <View className="flex-row items-center mt-2">
             <Ionicons
               name="time-outline"
@@ -543,7 +568,6 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
           </View>
         )}
 
-        {/* Badge téléchargé */}
         {isDownloaded && (
           <View className="absolute top-2 right-2">
             <Ionicons
@@ -587,7 +611,6 @@ export const MediaMessage: React.FC<MediaMessageProps> = ({
     >
       {renderMediaContent()}
 
-      {/* Heure */}
       <View
         className={`
           mt-1 px-1

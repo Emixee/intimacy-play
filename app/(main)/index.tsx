@@ -1,15 +1,9 @@
 /**
  * Écran d'accueil principal - Home Screen
  * 
- * Affiche :
- * - Header avec prénom et bouton profil
- * - Logo et titre de l'app
- * - Card "Nouvelle partie" avec actions
- * - Section "Comment ça marche"
- * - Banner Premium (si non premium)
- * 
- * CORRECTION : Vérifie les sessions actives au démarrage
- * FIX: Correction du paramètre "code" (était "sessionCode") et suppression de l'espace
+ * FIX BUGS :
+ * 1. Paramètre "code" au lieu de "sessionCode" pour navigation
+ * 2. Code brut sans espace pour Firebase (affichage avec espace)
  */
 
 import React, { useEffect, useState } from "react";
@@ -73,23 +67,17 @@ const HOW_TO_STEPS: HowToStep[] = [
 // COMPOSANTS
 // ============================================================
 
-/**
- * Logo de l'application avec cœurs
- */
 function AppLogo() {
   return (
     <View className="items-center mb-2">
-      {/* Cœurs */}
       <View className="flex-row items-center justify-center">
         <Text className="text-5xl">💕</Text>
       </View>
       
-      {/* Titre */}
       <Text className="text-3xl font-bold text-gray-800 mt-3">
         Couple Challenge
       </Text>
       
-      {/* Sous-titre */}
       <Text className="text-base text-gray-500 text-center mt-2 px-8">
         Pimentez votre relation avec des défis sensuels
       </Text>
@@ -97,9 +85,6 @@ function AppLogo() {
   );
 }
 
-/**
- * Card "Session en cours" - Affichée quand une session active existe
- */
 function ActiveSessionCard({ 
   displayCode,
   status,
@@ -113,7 +98,6 @@ function ActiveSessionCard({
   
   return (
     <View className="bg-white rounded-3xl p-6 shadow-sm mx-4 mt-6 border-2 border-pink-200">
-      {/* Header de la card */}
       <View className="flex-row items-center mb-4">
         <View className={`${isWaiting ? "bg-yellow-100" : "bg-green-100"} p-3 rounded-2xl`}>
           <Ionicons 
@@ -132,7 +116,6 @@ function ActiveSessionCard({
         </View>
       </View>
       
-      {/* Bouton reprendre */}
       <Button
         title={isWaiting ? "Voir la session" : "Reprendre la partie"}
         variant="primary"
@@ -145,13 +128,9 @@ function ActiveSessionCard({
   );
 }
 
-/**
- * Card "Nouvelle partie"
- */
 function NewGameCard() {
   return (
     <View className="bg-white rounded-3xl p-6 shadow-sm mx-4 mt-6">
-      {/* Header de la card */}
       <View className="flex-row items-center mb-5">
         <View className="bg-pink-100 p-3 rounded-2xl">
           <Ionicons name="game-controller-outline" size={24} color="#EC4899" />
@@ -161,7 +140,6 @@ function NewGameCard() {
         </Text>
       </View>
       
-      {/* Boutons */}
       <Link href="/(main)/create-session" asChild>
         <Button
           title="Créer une session"
@@ -187,18 +165,13 @@ function NewGameCard() {
   );
 }
 
-/**
- * Étape "Comment ça marche"
- */
 function HowToStepItem({ step }: { step: HowToStep }) {
   return (
     <View className="flex-row items-start mb-4">
-      {/* Numéro */}
       <View className="bg-pink-500 w-8 h-8 rounded-full items-center justify-center mr-4">
         <Text className="text-white font-bold text-sm">{step.number}</Text>
       </View>
       
-      {/* Contenu */}
       <View className="flex-1">
         <View className="flex-row items-center">
           <Ionicons name={step.icon} size={18} color="#EC4899" />
@@ -214,13 +187,9 @@ function HowToStepItem({ step }: { step: HowToStep }) {
   );
 }
 
-/**
- * Section "Comment ça marche"
- */
 function HowToSection() {
   return (
     <View className="bg-white rounded-3xl p-6 mx-4 mt-6 shadow-sm">
-      {/* Header */}
       <View className="flex-row items-center mb-5">
         <View className="bg-pink-100 p-3 rounded-2xl">
           <Ionicons name="help-circle-outline" size={24} color="#EC4899" />
@@ -230,7 +199,6 @@ function HowToSection() {
         </Text>
       </View>
       
-      {/* Étapes */}
       {HOW_TO_STEPS.map((step) => (
         <HowToStepItem key={step.number} step={step} />
       ))}
@@ -238,9 +206,6 @@ function HowToSection() {
   );
 }
 
-/**
- * Banner Premium
- */
 function PremiumBanner() {
   return (
     <TouchableOpacity
@@ -255,7 +220,6 @@ function PremiumBanner() {
         className="rounded-3xl p-5"
       >
         <View className="flex-row items-center justify-between">
-          {/* Contenu */}
           <View className="flex-1">
             <View className="flex-row items-center">
               <Text className="text-xl">👑</Text>
@@ -268,7 +232,6 @@ function PremiumBanner() {
             </Text>
           </View>
           
-          {/* Flèche */}
           <View className="bg-white/20 p-2 rounded-full">
             <Ionicons name="arrow-forward" size={20} color="#FFF" />
           </View>
@@ -278,9 +241,6 @@ function PremiumBanner() {
   );
 }
 
-/**
- * Section Dev Tools (mode développement uniquement)
- */
 function DevToolsSection({ onLogout }: { onLogout: () => void }) {
   return (
     <View className="mx-4 mt-6 mb-4 p-4 bg-gray-100 rounded-2xl border-2 border-dashed border-gray-300">
@@ -291,7 +251,6 @@ function DevToolsSection({ onLogout }: { onLogout: () => void }) {
         </Text>
       </View>
       
-      {/* Bouton Déconnexion */}
       <TouchableOpacity
         onPress={onLogout}
         className="bg-gray-400 py-2 px-4 rounded-xl flex-row items-center justify-center"
@@ -312,11 +271,9 @@ function DevToolsSection({ onLogout }: { onLogout: () => void }) {
 export default function HomeScreen() {
   const { userData, isPremium, logout } = useAuth();
   
-  // État pour la session active
   const [activeSession, setActiveSession] = useState<ActiveSessionData | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   
-  // Extraire le prénom (premier mot du displayName)
   const firstName = userData?.displayName?.split(" ")[0] || "Joueur";
 
   // ============================================================
@@ -324,7 +281,6 @@ export default function HomeScreen() {
   // ============================================================
   useEffect(() => {
     const checkActiveSessions = async () => {
-      // Utilise userData?.id (pas uid)
       if (!userData?.id) {
         setIsCheckingSession(false);
         return;
@@ -335,7 +291,6 @@ export default function HomeScreen() {
         const result = await sessionService.getActiveSessions(userData.id);
         
         if (result.success && result.data && result.data.length > 0) {
-          // Priorité aux sessions "active" sur "waiting"
           const activeSessionData = result.data.find(s => s.status === "active");
           const waitingSessionData = result.data.find(s => s.status === "waiting");
           
@@ -345,14 +300,14 @@ export default function HomeScreen() {
             console.log("[HomeScreen] Found session:", sessionToShow.id, "status:", sessionToShow.status);
             
             // FIX: Stocker le code BRUT (sans espace) et le code AFFICHÉ (avec espace)
-            const rawCode = sessionToShow.id; // Code brut pour Firebase
+            const rawCode = sessionToShow.id;
             const displayCode = rawCode.length === 6 
               ? `${rawCode.slice(0, 3)} ${rawCode.slice(3)}`
               : rawCode;
             
             setActiveSession({
-              code: rawCode,           // Pour la navigation (sans espace)
-              displayCode: displayCode, // Pour l'affichage (avec espace)
+              code: rawCode,
+              displayCode: displayCode,
               status: sessionToShow.status as "waiting" | "active",
             });
           }
@@ -376,20 +331,18 @@ export default function HomeScreen() {
   const handleResumeSession = () => {
     if (!activeSession) return;
     
-    // FIX: Utiliser le code BRUT (sans espace) et le paramètre "code" (pas "sessionCode")
+    // FIX: Utiliser le code BRUT et le paramètre "code"
+    console.log("[HomeScreen] Resuming session with code:", activeSession.code);
+    
     if (activeSession.status === "active") {
-      // Session active → aller au jeu
-      console.log("[HomeScreen] Resuming game with code:", activeSession.code);
       router.push({
         pathname: "/(main)/game",
-        params: { code: activeSession.code }, // FIX: "code" au lieu de "sessionCode"
+        params: { code: activeSession.code },
       });
     } else {
-      // Session en attente → aller à la waiting room
-      console.log("[HomeScreen] Going to waiting room with code:", activeSession.code);
       router.push({
         pathname: "/(main)/waiting-room",
-        params: { code: activeSession.code }, // FIX: "code" au lieu de "sessionCode"
+        params: { code: activeSession.code },
       });
     }
   };
@@ -398,7 +351,6 @@ export default function HomeScreen() {
   // RENDER
   // ============================================================
 
-  // Afficher un loader pendant la vérification
   if (isCheckingSession) {
     return (
       <SafeAreaView className="flex-1 bg-pink-50 items-center justify-center">
@@ -415,7 +367,6 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 20 }}
       >
-        {/* ========== HEADER ========== */}
         <View className="flex-row items-center justify-between px-6 py-4">
           <View>
             <Text className="text-gray-500 text-sm">Bonjour</Text>
@@ -434,12 +385,10 @@ export default function HomeScreen() {
           </Link>
         </View>
 
-        {/* ========== LOGO & TITRE ========== */}
         <View className="mt-4">
           <AppLogo />
         </View>
 
-        {/* ========== SESSION ACTIVE (si existe) ========== */}
         {activeSession && (
           <ActiveSessionCard 
             displayCode={activeSession.displayCode}
@@ -448,16 +397,12 @@ export default function HomeScreen() {
           />
         )}
 
-        {/* ========== CARD NOUVELLE PARTIE (si pas de session active) ========== */}
         {!activeSession && <NewGameCard />}
 
-        {/* ========== COMMENT ÇA MARCHE ========== */}
         <HowToSection />
 
-        {/* ========== PREMIUM BANNER ========== */}
         {!isPremium && <PremiumBanner />}
 
-        {/* ========== DEV TOOLS (Dev only) ========== */}
         {__DEV__ && <DevToolsSection onLogout={logout} />}
       </ScrollView>
     </SafeAreaView>

@@ -1,11 +1,10 @@
 /**
  * MediaViewer - Visualisation plein écran des médias
  * 
- * PROMPT AUDIO : Support complet audio avec :
- * - Lecteur audio avec barre de progression
- * - Visualisation waveform simplifiée
- * - Contrôles play/pause
- * - Timer d'expiration
+ * FIX CRASH : Gestion robuste de expiresAt null
+ * - Try-catch sur expiresAt.toDate()
+ * - Vérification que expiresAt est un Timestamp valide
+ * - Fonction helper safeToDate réutilisable
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
@@ -34,27 +33,56 @@ import type { MessageType } from "../../types";
 // ============================================================
 
 interface MediaViewerProps {
-  /** Modal visible */
   visible: boolean;
-  /** Type de média */
   type: MessageType;
-  /** URL du média */
   mediaUrl: string | null;
-  /** Date d'expiration */
-  expiresAt: FirebaseFirestoreTypes.Timestamp | null;
-  /** Média déjà téléchargé */
+  expiresAt: FirebaseFirestoreTypes.Timestamp | null | undefined;
   isDownloaded: boolean;
-  /** C'est mon message */
   isOwnMessage: boolean;
-  /** User is Premium */
   isPremium: boolean;
-  /** Callback fermeture */
   onClose: () => void;
-  /** Callback téléchargement */
   onDownload?: () => Promise<void>;
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+// ============================================================
+// HELPER: Conversion sécurisée de timestamp
+// ============================================================
+
+const safeToDate = (
+  timestamp: FirebaseFirestoreTypes.Timestamp | Date | null | undefined
+): Date | null => {
+  if (!timestamp) {
+    return null;
+  }
+  
+  if (timestamp instanceof Date) {
+    return timestamp;
+  }
+  
+  if (typeof timestamp === "object" && timestamp !== null) {
+    if ("toDate" in timestamp && typeof (timestamp as any).toDate === "function") {
+      try {
+        return (timestamp as any).toDate();
+      } catch (error) {
+        console.warn("[MediaViewer] toDate() failed:", error);
+        return null;
+      }
+    }
+    
+    if ("seconds" in timestamp && typeof (timestamp as any).seconds === "number") {
+      try {
+        return new Date((timestamp as any).seconds * 1000);
+      } catch (error) {
+        console.warn("[MediaViewer] seconds conversion failed:", error);
+        return null;
+      }
+    }
+  }
+  
+  return null;
+};
 
 // ============================================================
 // COMPOSANT
@@ -100,9 +128,8 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 
   useEffect(() => {
     return () => {
-      // Cleanup sound on unmount
       if (soundRef.current) {
-        soundRef.current.unloadAsync();
+        soundRef.current.unloadAsync().catch(() => {});
       }
     };
   }, []);
@@ -110,10 +137,9 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   // Reset à la fermeture
   useEffect(() => {
     if (!visible) {
-      // Arrêter l'audio
       if (soundRef.current) {
-        soundRef.current.stopAsync();
-        soundRef.current.unloadAsync();
+        soundRef.current.stopAsync().catch(() => {});
+        soundRef.current.unloadAsync().catch(() => {});
         soundRef.current = null;
         setSound(null);
       }
@@ -126,20 +152,39 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   }, [visible]);
 
   // ============================================================
-  // TIMER D'EXPIRATION
+  // TIMER D'EXPIRATION (FIX: avec protection null)
   // ============================================================
 
   useEffect(() => {
-    if (!visible || !expiresAt) return;
+    if (!visible) return;
+    
+    // Si pas d'expiration, pas de timer
+    if (!expiresAt) {
+      setRemainingSeconds(0);
+      return;
+    }
 
     const updateTimer = () => {
-      const seconds = differenceInSeconds(expiresAt.toDate(), new Date());
-      setRemainingSeconds(Math.max(0, seconds));
-      
-      // Fermer automatiquement si expiré
-      if (seconds <= 0) {
-        handleClose();
-        Alert.alert("Média expiré", "Ce média n'est plus disponible.");
+      try {
+        const expirationDate = safeToDate(expiresAt);
+        
+        // Si conversion échoue, pas de timer
+        if (!expirationDate) {
+          setRemainingSeconds(0);
+          return;
+        }
+        
+        const seconds = differenceInSeconds(expirationDate, new Date());
+        setRemainingSeconds(Math.max(0, seconds));
+        
+        // Fermer automatiquement si expiré
+        if (seconds <= 0) {
+          handleClose();
+          Alert.alert("Média expiré", "Ce média n'est plus disponible.");
+        }
+      } catch (error) {
+        console.warn("[MediaViewer] Timer update error:", error);
+        setRemainingSeconds(0);
       }
     };
 
@@ -176,7 +221,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
       clearTimeout(controlsTimeout.current);
     }
     controlsTimeout.current = setTimeout(() => {
-      if (type !== "audio") { // Ne pas cacher pour l'audio
+      if (type !== "audio") {
         setShowControls(false);
       }
     }, 3000);
@@ -201,7 +246,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   }, [visible, type, hideControlsAfterDelay]);
 
   // ============================================================
-  // PAN RESPONDER (Swipe down pour fermer)
+  // PAN RESPONDER
   // ============================================================
 
   const panResponder = useRef(
@@ -240,13 +285,11 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   // ============================================================
 
   const handleClose = useCallback(() => {
-    // Stop audio
     if (soundRef.current) {
-      soundRef.current.stopAsync();
+      soundRef.current.stopAsync().catch(() => {});
     }
-    // Stop vidéo
     if (videoRef.current && videoStatus?.isLoaded) {
-      videoRef.current.stopAsync();
+      videoRef.current.stopAsync().catch(() => {});
     }
     onClose();
   }, [videoStatus, onClose]);
@@ -286,14 +329,18 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   const toggleVideoPlayback = async () => {
     if (!videoRef.current || !videoStatus?.isLoaded) return;
 
-    if (videoStatus.isPlaying) {
-      await videoRef.current.pauseAsync();
-    } else {
-      await videoRef.current.playAsync();
+    try {
+      if (videoStatus.isPlaying) {
+        await videoRef.current.pauseAsync();
+      } else {
+        await videoRef.current.playAsync();
+      }
+      
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      hideControlsAfterDelay();
+    } catch (error) {
+      console.error("[MediaViewer] Video toggle error:", error);
     }
-    
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    hideControlsAfterDelay();
   };
 
   // ============================================================
@@ -306,7 +353,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
     try {
       setIsLoading(true);
 
-      // Si déjà chargé, toggle play/pause
       if (soundRef.current) {
         const status = await soundRef.current.getStatusAsync();
         if (status.isLoaded) {
@@ -322,13 +368,11 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
         }
       }
 
-      // Configurer le mode audio
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true,
         staysActiveInBackground: false,
       });
 
-      // Charger le son
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: mediaUrl },
         { shouldPlay: true },
@@ -363,7 +407,11 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
 
   const seekAudio = async (position: number) => {
     if (!soundRef.current) return;
-    await soundRef.current.setPositionAsync(position);
+    try {
+      await soundRef.current.setPositionAsync(position);
+    } catch (error) {
+      console.error("[MediaViewer] Seek error:", error);
+    }
   };
 
   // Auto-load audio à l'ouverture
@@ -405,16 +453,21 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
             <View className="absolute top-0 left-0 right-0 z-20 pt-12 px-4 pb-4 bg-black/50">
               <View className="flex-row items-center justify-between">
                 {/* Timer d'expiration */}
-                <View
-                  className={`px-3 py-1.5 rounded-full flex-row items-center ${
-                    isExpiringSoon ? "bg-red-500" : "bg-black/60"
-                  }`}
-                >
-                  <Ionicons name="time-outline" size={16} color="white" />
-                  <Text className="text-white text-sm font-medium ml-1">
-                    {formatTime(remainingSeconds)}
-                  </Text>
-                </View>
+                {remainingSeconds > 0 && (
+                  <View
+                    className={`px-3 py-1.5 rounded-full flex-row items-center ${
+                      isExpiringSoon ? "bg-red-500" : "bg-black/60"
+                    }`}
+                  >
+                    <Ionicons name="time-outline" size={16} color="white" />
+                    <Text className="text-white text-sm font-medium ml-1">
+                      {formatTime(remainingSeconds)}
+                    </Text>
+                  </View>
+                )}
+                
+                {/* Spacer si pas de timer */}
+                {remainingSeconds <= 0 && <View />}
 
                 {/* Bouton fermer */}
                 <TouchableOpacity
@@ -471,7 +524,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
                   onLoadStart={() => setIsLoading(true)}
                 />
 
-                {/* Bouton play/pause overlay */}
                 {showControls && videoStatus?.isLoaded && (
                   <TouchableOpacity
                     onPress={toggleVideoPlayback}
@@ -490,7 +542,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
             {/* Audio - Lecteur complet */}
             {type === "audio" && (
               <View className="items-center justify-center px-8 w-full">
-                {/* Icône audio */}
                 <View className="w-32 h-32 bg-pink-500 rounded-full items-center justify-center mb-8 shadow-lg">
                   {isLoading ? (
                     <ActivityIndicator size="large" color="white" />
@@ -503,14 +554,12 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
                   Message vocal
                 </Text>
 
-                {/* Barre de progression */}
                 <View className="w-full px-4 mb-4">
                   <TouchableOpacity
                     activeOpacity={1}
                     onPress={(e) => {
-                      // Seek on tap
                       const locationX = e.nativeEvent.locationX;
-                      const progressWidth = SCREEN_WIDTH - 64; // 32px padding de chaque côté
+                      const progressWidth = SCREEN_WIDTH - 64;
                       const percentage = locationX / progressWidth;
                       const newPosition = percentage * playbackDuration;
                       seekAudio(newPosition);
@@ -527,7 +576,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
                     </View>
                   </TouchableOpacity>
 
-                  {/* Temps */}
                   <View className="flex-row justify-between mt-2">
                     <Text className="text-white/60 text-sm">
                       {formatAudioTime(playbackPosition)}
@@ -538,7 +586,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
                   </View>
                 </View>
 
-                {/* Bouton play/pause */}
                 <TouchableOpacity
                   onPress={loadAndPlayAudio}
                   disabled={isLoading}
@@ -563,7 +610,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
           {showControls && (
             <View className="absolute bottom-0 left-0 right-0 z-20 pb-12 px-4 pt-4 bg-black/50">
               <View className="flex-row items-center justify-center">
-                {/* Bouton télécharger (Premium uniquement) */}
                 {canDownload && (
                   <TouchableOpacity
                     onPress={handleDownload}
@@ -583,7 +629,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
                   </TouchableOpacity>
                 )}
 
-                {/* Message si non Premium */}
                 {!isPremium && !isOwnMessage && remainingSeconds > 0 && (
                   <View className="flex-row items-center bg-gray-800 px-4 py-2 rounded-full">
                     <Ionicons name="lock-closed" size={16} color="#9CA3AF" />
@@ -593,7 +638,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
                   </View>
                 )}
 
-                {/* Message si déjà téléchargé */}
                 {isDownloaded && !isOwnMessage && (
                   <View className="flex-row items-center bg-green-600/80 px-4 py-2 rounded-full">
                     <Ionicons name="checkmark-circle" size={16} color="white" />
@@ -604,7 +648,6 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
                 )}
               </View>
 
-              {/* Indication swipe (sauf pour audio) */}
               {type !== "audio" && (
                 <View className="items-center mt-4">
                   <View className="w-10 h-1 bg-white/30 rounded-full" />
