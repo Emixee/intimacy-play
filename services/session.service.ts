@@ -22,6 +22,9 @@
  * 
  * FIX BUG 15 DÉFIS PREMIUM :
  * La vérification utilise maintenant challengeCount / 2 (défis par joueur)
+ * 
+ * FIX REJOIN SESSION :
+ * Permet au partenaire existant de re-rejoindre une session active
  */
 
 import { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
@@ -337,6 +340,9 @@ export const sessionService = {
 
   /**
    * Rejoindre une session
+   * 
+   * FIX REJOIN SESSION :
+   * Permet au partenaire existant de re-rejoindre une session active
    */
   joinSession: async (
     sessionCode: string,
@@ -358,12 +364,42 @@ export const sessionService = {
 
       const sessionData = sessionDoc.data() as Omit<Session, "id">;
 
+      // Vérifier si c'est sa propre session
       if (sessionData.creatorId === partnerId) {
         return {
           success: false,
           error: getSessionErrorMessage("CANNOT_JOIN_OWN_SESSION"),
         };
       }
+
+      // ============================================================
+      // FIX REJOIN SESSION : Permettre au partenaire existant de re-rejoindre
+      // ============================================================
+      if (sessionData.status === "active" && sessionData.partnerId === partnerId) {
+        console.log(`[SessionService] Partner ${partnerId} rejoining active session ${sessionCode}`);
+        const session: Session = {
+          id: normalizedCode,
+          ...sessionData,
+        } as Session;
+        return {
+          success: true,
+          data: session,
+        };
+      }
+
+      // Permettre au créateur de revenir à sa propre session active
+      if (sessionData.status === "active" && sessionData.creatorId === partnerId) {
+        console.log(`[SessionService] Creator ${partnerId} rejoining active session ${sessionCode}`);
+        const session: Session = {
+          id: normalizedCode,
+          ...sessionData,
+        } as Session;
+        return {
+          success: true,
+          data: session,
+        };
+      }
+      // ============================================================
 
       if (sessionData.status !== "waiting") {
         const errorKey =

@@ -7,9 +7,11 @@
  * - Card "Nouvelle partie" avec actions
  * - Section "Comment ça marche"
  * - Banner Premium (si non premium)
+ * 
+ * CORRECTION : Vérifie les sessions actives au démarrage
  */
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -21,7 +23,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../../hooks/useAuth";
-import { Button } from "../../components/ui";
+import { Button, LoadingSpinner } from "../../components/ui";
+import { sessionService } from "../../services/session.service";
 
 // ============================================================
 // TYPES
@@ -83,6 +86,54 @@ function AppLogo() {
       <Text className="text-base text-gray-500 text-center mt-2 px-8">
         Pimentez votre relation avec des défis sensuels
       </Text>
+    </View>
+  );
+}
+
+/**
+ * Card "Session en cours" - Affichée quand une session active existe
+ */
+function ActiveSessionCard({ 
+  sessionCode,
+  status,
+  onResume,
+}: { 
+  sessionCode: string;
+  status: "waiting" | "active";
+  onResume: () => void;
+}) {
+  const isWaiting = status === "waiting";
+  
+  return (
+    <View className="bg-white rounded-3xl p-6 shadow-sm mx-4 mt-6 border-2 border-pink-200">
+      {/* Header de la card */}
+      <View className="flex-row items-center mb-4">
+        <View className={`${isWaiting ? "bg-yellow-100" : "bg-green-100"} p-3 rounded-2xl`}>
+          <Ionicons 
+            name={isWaiting ? "hourglass-outline" : "play-circle"} 
+            size={24} 
+            color={isWaiting ? "#EAB308" : "#22C55E"} 
+          />
+        </View>
+        <View className="ml-4 flex-1">
+          <Text className="text-xl font-bold text-gray-800">
+            {isWaiting ? "En attente du partenaire" : "Session en cours"}
+          </Text>
+          <Text className="text-sm text-gray-500">
+            Code : {sessionCode}
+          </Text>
+        </View>
+      </View>
+      
+      {/* Bouton reprendre */}
+      <Button
+        title={isWaiting ? "Voir la session" : "Reprendre la partie"}
+        variant="primary"
+        size="lg"
+        fullWidth
+        icon={<Ionicons name={isWaiting ? "eye" : "play"} size={22} color="#FFF" />}
+        onPress={onResume}
+      />
     </View>
   );
 }
@@ -254,8 +305,99 @@ function DevToolsSection({ onLogout }: { onLogout: () => void }) {
 export default function HomeScreen() {
   const { userData, isPremium, logout } = useAuth();
   
+  // État pour la session active
+  const [activeSession, setActiveSession] = useState<{
+    code: string;
+    status: "waiting" | "active";
+  } | null>(null);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  
   // Extraire le prénom (premier mot du displayName)
   const firstName = userData?.displayName?.split(" ")[0] || "Joueur";
+
+  // ============================================================
+  // VÉRIFIER LES SESSIONS ACTIVES AU DÉMARRAGE
+  // ============================================================
+  useEffect(() => {
+    const checkActiveSessions = async () => {
+      // Utilise userData?.id (pas uid)
+      if (!userData?.id) {
+        setIsCheckingSession(false);
+        return;
+      }
+
+      try {
+        console.log("[HomeScreen] Checking for active sessions...");
+        const result = await sessionService.getActiveSessions(userData.id);
+        
+        if (result.success && result.data && result.data.length > 0) {
+          // Priorité aux sessions "active" sur "waiting"
+          const activeSessionData = result.data.find(s => s.status === "active");
+          const waitingSessionData = result.data.find(s => s.status === "waiting");
+          
+          const sessionToShow = activeSessionData || waitingSessionData;
+          
+          if (sessionToShow) {
+            console.log("[HomeScreen] Found session:", sessionToShow.id, "status:", sessionToShow.status);
+            
+            // Formater le code avec espace
+            const formattedCode = sessionToShow.id.length === 6 
+              ? `${sessionToShow.id.slice(0, 3)} ${sessionToShow.id.slice(3)}`
+              : sessionToShow.id;
+            
+            setActiveSession({
+              code: formattedCode,
+              status: sessionToShow.status as "waiting" | "active",
+            });
+          }
+        } else {
+          console.log("[HomeScreen] No active sessions found");
+        }
+      } catch (error) {
+        console.error("[HomeScreen] Error checking sessions:", error);
+      } finally {
+        setIsCheckingSession(false);
+      }
+    };
+
+    checkActiveSessions();
+  }, [userData?.id]);
+
+  // ============================================================
+  // HANDLERS
+  // ============================================================
+  
+  const handleResumeSession = () => {
+    if (!activeSession) return;
+    
+    if (activeSession.status === "active") {
+      // Session active → aller au jeu
+      router.push({
+        pathname: "/(main)/game",
+        params: { sessionCode: activeSession.code },
+      });
+    } else {
+      // Session en attente → aller à la waiting room
+      router.push({
+        pathname: "/(main)/waiting-room",
+        params: { sessionCode: activeSession.code },
+      });
+    }
+  };
+
+  // ============================================================
+  // RENDER
+  // ============================================================
+
+  // Afficher un loader pendant la vérification
+  if (isCheckingSession) {
+    return (
+      <SafeAreaView className="flex-1 bg-pink-50 items-center justify-center">
+        <LoadingSpinner size="large" color="#EC4899" />
+        <Text className="text-gray-500 mt-4">Vérification en cours...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-pink-50" edges={["top"]}>
@@ -288,8 +430,17 @@ export default function HomeScreen() {
           <AppLogo />
         </View>
 
-        {/* ========== CARD NOUVELLE PARTIE ========== */}
-        <NewGameCard />
+        {/* ========== SESSION ACTIVE (si existe) ========== */}
+        {activeSession && (
+          <ActiveSessionCard 
+            sessionCode={activeSession.code}
+            status={activeSession.status}
+            onResume={handleResumeSession}
+          />
+        )}
+
+        {/* ========== CARD NOUVELLE PARTIE (si pas de session active) ========== */}
+        {!activeSession && <NewGameCard />}
 
         {/* ========== COMMENT ÇA MARCHE ========== */}
         <HowToSection />
