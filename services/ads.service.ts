@@ -47,12 +47,12 @@ export const AD_UNIT_IDS = {
   // IDs de production (à remplacer par vos propres IDs)
   PRODUCTION: {
     INTERSTITIAL: Platform.select({
-      ios: "ca-app-pub-4902274309112105/2067393503",
-      android: "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX",
+      ios: "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX",
+      android: "ca-app-pub-4902274309112105/2067393503",
     }) as string,
     REWARDED: Platform.select({
-      ios: "ca-app-pub-4902274309112105/9408479866",
-      android: "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX",
+      ios: "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX",
+      android: "ca-app-pub-4902274309112105/9408479866",
     }) as string,
     BANNER: Platform.select({
       ios: "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX",
@@ -65,7 +65,7 @@ export const AD_UNIT_IDS = {
  * Mode développement/production
  * Basculer sur false pour la production
  */
-const IS_DEV_MODE = __DEV__;
+const IS_DEV_MODE = __DEV__ || true;
 
 /**
  * Récupère l'ID d'annonce approprié
