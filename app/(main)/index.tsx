@@ -9,6 +9,7 @@
  * - Banner Premium (si non premium)
  * 
  * CORRECTION : Vérifie les sessions actives au démarrage
+ * FIX: Correction du paramètre "code" (était "sessionCode") et suppression de l'espace
  */
 
 import React, { useEffect, useState } from "react";
@@ -35,6 +36,12 @@ interface HowToStep {
   title: string;
   description: string;
   icon: keyof typeof Ionicons.glyphMap;
+}
+
+interface ActiveSessionData {
+  code: string;           // Code brut pour Firebase (sans espace)
+  displayCode: string;    // Code formaté pour affichage (avec espace)
+  status: "waiting" | "active";
 }
 
 // ============================================================
@@ -94,11 +101,11 @@ function AppLogo() {
  * Card "Session en cours" - Affichée quand une session active existe
  */
 function ActiveSessionCard({ 
-  sessionCode,
+  displayCode,
   status,
   onResume,
 }: { 
-  sessionCode: string;
+  displayCode: string;
   status: "waiting" | "active";
   onResume: () => void;
 }) {
@@ -120,7 +127,7 @@ function ActiveSessionCard({
             {isWaiting ? "En attente du partenaire" : "Session en cours"}
           </Text>
           <Text className="text-sm text-gray-500">
-            Code : {sessionCode}
+            Code : {displayCode}
           </Text>
         </View>
       </View>
@@ -306,10 +313,7 @@ export default function HomeScreen() {
   const { userData, isPremium, logout } = useAuth();
   
   // État pour la session active
-  const [activeSession, setActiveSession] = useState<{
-    code: string;
-    status: "waiting" | "active";
-  } | null>(null);
+  const [activeSession, setActiveSession] = useState<ActiveSessionData | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   
   // Extraire le prénom (premier mot du displayName)
@@ -340,13 +344,15 @@ export default function HomeScreen() {
           if (sessionToShow) {
             console.log("[HomeScreen] Found session:", sessionToShow.id, "status:", sessionToShow.status);
             
-            // Formater le code avec espace
-            const formattedCode = sessionToShow.id.length === 6 
-              ? `${sessionToShow.id.slice(0, 3)} ${sessionToShow.id.slice(3)}`
-              : sessionToShow.id;
+            // FIX: Stocker le code BRUT (sans espace) et le code AFFICHÉ (avec espace)
+            const rawCode = sessionToShow.id; // Code brut pour Firebase
+            const displayCode = rawCode.length === 6 
+              ? `${rawCode.slice(0, 3)} ${rawCode.slice(3)}`
+              : rawCode;
             
             setActiveSession({
-              code: formattedCode,
+              code: rawCode,           // Pour la navigation (sans espace)
+              displayCode: displayCode, // Pour l'affichage (avec espace)
               status: sessionToShow.status as "waiting" | "active",
             });
           }
@@ -370,17 +376,20 @@ export default function HomeScreen() {
   const handleResumeSession = () => {
     if (!activeSession) return;
     
+    // FIX: Utiliser le code BRUT (sans espace) et le paramètre "code" (pas "sessionCode")
     if (activeSession.status === "active") {
       // Session active → aller au jeu
+      console.log("[HomeScreen] Resuming game with code:", activeSession.code);
       router.push({
         pathname: "/(main)/game",
-        params: { sessionCode: activeSession.code },
+        params: { code: activeSession.code }, // FIX: "code" au lieu de "sessionCode"
       });
     } else {
       // Session en attente → aller à la waiting room
+      console.log("[HomeScreen] Going to waiting room with code:", activeSession.code);
       router.push({
         pathname: "/(main)/waiting-room",
-        params: { sessionCode: activeSession.code },
+        params: { code: activeSession.code }, // FIX: "code" au lieu de "sessionCode"
       });
     }
   };
@@ -433,7 +442,7 @@ export default function HomeScreen() {
         {/* ========== SESSION ACTIVE (si existe) ========== */}
         {activeSession && (
           <ActiveSessionCard 
-            sessionCode={activeSession.code}
+            displayCode={activeSession.displayCode}
             status={activeSession.status}
             onResume={handleResumeSession}
           />
