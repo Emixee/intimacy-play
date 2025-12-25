@@ -5,15 +5,6 @@
  * - Composants extraits vers components/game/
  * - Meilleure performance avec React.memo et useMemo
  * - Code plus léger (~300 lignes vs 1500)
- *
- * FONCTIONNALITÉS :
- * 1. Header avec progression
- * 2. Indicateur de tour
- * 3. Carte du défi
- * 4. Boutons d'action
- * 5. Zone réactions
- * 6. Zone chat
- * 7. Game Over avec confettis
  */
 
 import React, { useState, useCallback, useMemo, useEffect } from "react";
@@ -418,7 +409,14 @@ export default function GameScreen() {
           />
         )}
 
-        <TurnIndicator isChallengeForMe={isChallengeForMe} isMyTurn={isMyTurn} partnerName={partnerName} />
+        {/* TurnIndicator - utilise les props existantes du composant */}
+        <View className="mb-4">
+          <TurnIndicator 
+            isMyTurn={isMyTurn} 
+            partnerName={partnerName} 
+            variant="banner" 
+          />
+        </View>
 
         <ChallengeCardDisplay challenge={currentChallenge} isChallengeForMe={isChallengeForMe} />
 
