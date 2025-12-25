@@ -31,7 +31,9 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.POST_NOTIFICATIONS"
-      ]
+      ],
+      "softwareKeyboardLayoutMode": "pan",
+      "allowBackup": false
     },
     "plugins": [
       "expo-router",
@@ -49,6 +51,14 @@
       "expo-font",
       "expo-secure-store",
       [
+        "expo-navigation-bar",
+        {
+          "position": "absolute",
+          "visibility": "hidden",
+          "behavior": "overlay-swipe"
+        }
+      ],
+      [
         "react-native-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-3940256099942544~3347511713"
@@ -65,6 +75,14 @@
       "eas": {
         "projectId": "8d2c186a-4b33-46fa-b12f-9e641b9593b8"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/8d2c186a-4b33-46fa-b12f-9e641b9593b8",
+      "enabled": true,
+      "fallbackToCacheTimeout": 0
     }
   }
 }

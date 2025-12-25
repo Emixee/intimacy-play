@@ -1,8 +1,9 @@
 /**
- * Layout pour les écrans principaux
+ * Layout pour les écrans principaux - OPTIMISÉ PRODUCTION
  *
  * - Redirige vers (auth)/login si l'utilisateur n'est pas connecté
  * - Initialise les notifications push
+ * - test-ads.tsx supprimé pour la production
  */
 
 import { useEffect, useRef } from "react";
