@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Intimacy Play",
+    "name": "Couple Challenge",
     "slug": "intimacy-play",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -61,7 +61,7 @@
       [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": "ca-app-pub-3940256099942544~3347511713"
+          "androidAppId": "ca-app-pub-4902274309112105~6479064195"
         }
       ]
     ],
