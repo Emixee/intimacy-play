@@ -5,7 +5,7 @@
 export { useAuth } from './useAuth';
 export { useSession } from './useSession';
 export { useNotifications } from './useNotifications';
-export { useReactions } from './useReactions';
+export { useSessionReactions, useReactionPicker } from './useReactions';
 export { usePremiumFeature } from './usePremiumFeature';
 export { useError } from './useError';
 export { useNetworkStatus } from './useNetworkStatus';

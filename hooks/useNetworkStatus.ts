@@ -8,19 +8,20 @@
  */
 
 import { useEffect, useCallback, useRef, useState } from 'react';
-import NetInfo, { NetInfoState, NetInfoStateType } from '@react-native-community/netinfo';
+import { AppState, AppStateStatus } from 'react-native';
 import { useErrorStore } from '../stores/errorStore';
 import { useToast } from '../components/ui/Toast';
-import { AppState, AppStateStatus } from 'react-native';
 
 // ============================================================
 // TYPES
 // ============================================================
 
+type ConnectionType = 'wifi' | 'cellular' | 'ethernet' | 'unknown' | 'none';
+
 interface NetworkStatus {
   isConnected: boolean;
   isInternetReachable: boolean | null;
-  type: NetInfoStateType;
+  type: ConnectionType;
   isWifi: boolean;
   isCellular: boolean;
   isReconnecting: boolean;
@@ -30,6 +31,35 @@ interface UseNetworkStatusReturn extends NetworkStatus {
   checkConnection: () => Promise<boolean>;
   waitForConnection: (timeoutMs?: number) => Promise<boolean>;
 }
+
+// ============================================================
+// SIMPLE NETWORK CHECK (sans NetInfo)
+// ============================================================
+
+const checkNetworkConnectivity = async (): Promise<{ isConnected: boolean; type: ConnectionType }> => {
+  try {
+    // Essayer de faire une requête simple pour vérifier la connectivité
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch('https://www.google.com/generate_204', {
+      method: 'HEAD',
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    return {
+      isConnected: response.ok || response.status === 204,
+      type: 'unknown',
+    };
+  } catch (error) {
+    return {
+      isConnected: false,
+      type: 'none',
+    };
+  }
+};
 
 // ============================================================
 // HOOK
@@ -43,7 +73,7 @@ export const useNetworkStatus = (): UseNetworkStatusReturn => {
   const [status, setStatus] = useState<NetworkStatus>({
     isConnected: true,
     isInternetReachable: true,
-    type: 'unknown' as NetInfoStateType,
+    type: 'unknown',
     isWifi: false,
     isCellular: false,
     isReconnecting: false,
@@ -52,22 +82,19 @@ export const useNetworkStatus = (): UseNetworkStatusReturn => {
   // Refs
   const wasConnectedRef = useRef<boolean>(true);
   const reconnectToastShownRef = useRef<boolean>(false);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const checkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ----------------------------------------------------------
   // GESTION DES CHANGEMENTS DE CONNEXION
   // ----------------------------------------------------------
 
-  const handleNetworkChange = useCallback((state: NetInfoState) => {
-    const isConnected = state.isConnected ?? false;
-    const isInternetReachable = state.isInternetReachable;
-    
+  const handleNetworkChange = useCallback((isConnected: boolean, type: ConnectionType = 'unknown') => {
     const newStatus: NetworkStatus = {
       isConnected,
-      isInternetReachable,
-      type: state.type,
-      isWifi: state.type === 'wifi',
-      isCellular: state.type === 'cellular',
+      isInternetReachable: isConnected,
+      type,
+      isWifi: type === 'wifi',
+      isCellular: type === 'cellular',
       isReconnecting: false,
     };
 
@@ -96,20 +123,28 @@ export const useNetworkStatus = (): UseNetworkStatusReturn => {
   }, [setOffline, toast]);
 
   // ----------------------------------------------------------
-  // SUBSCRIPTION
+  // VÉRIFICATION PÉRIODIQUE
   // ----------------------------------------------------------
 
   useEffect(() => {
-    // S'abonner aux changements de réseau
-    unsubscribeRef.current = NetInfo.addEventListener(handleNetworkChange);
-
     // Vérifier l'état initial
-    NetInfo.fetch().then(handleNetworkChange);
+    checkNetworkConnectivity().then(({ isConnected, type }) => {
+      handleNetworkChange(isConnected, type);
+    });
+
+    // Vérification périodique toutes les 30 secondes
+    checkIntervalRef.current = setInterval(async () => {
+      const { isConnected, type } = await checkNetworkConnectivity();
+      // Ne mettre à jour que si le statut change
+      if (isConnected !== wasConnectedRef.current) {
+        handleNetworkChange(isConnected, type);
+      }
+    }, 30000);
 
     // Cleanup
     return () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current);
       }
     };
   }, [handleNetworkChange]);
@@ -119,10 +154,11 @@ export const useNetworkStatus = (): UseNetworkStatusReturn => {
   // ----------------------------------------------------------
 
   useEffect(() => {
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
         // Re-vérifier la connexion quand l'app revient au premier plan
-        NetInfo.fetch().then(handleNetworkChange);
+        const { isConnected, type } = await checkNetworkConnectivity();
+        handleNetworkChange(isConnected, type);
       }
     };
 
@@ -142,9 +178,9 @@ export const useNetworkStatus = (): UseNetworkStatusReturn => {
    */
   const checkConnection = useCallback(async (): Promise<boolean> => {
     try {
-      const state = await NetInfo.fetch();
-      handleNetworkChange(state);
-      return state.isConnected ?? false;
+      const { isConnected, type } = await checkNetworkConnectivity();
+      handleNetworkChange(isConnected, type);
+      return isConnected;
     } catch (error) {
       console.error('[Network] Check failed:', error);
       return false;
@@ -156,35 +192,37 @@ export const useNetworkStatus = (): UseNetworkStatusReturn => {
    */
   const waitForConnection = useCallback(async (timeoutMs: number = 30000): Promise<boolean> => {
     // Si déjà connecté, retourner immédiatement
-    const currentState = await NetInfo.fetch();
-    if (currentState.isConnected) {
+    const { isConnected } = await checkNetworkConnectivity();
+    if (isConnected) {
       return true;
     }
 
     setStatus((prev) => ({ ...prev, isReconnecting: true }));
 
     return new Promise((resolve) => {
-      let timeoutId: NodeJS.Timeout;
-      let unsubscribe: (() => void) | null = null;
+      let timeoutId: ReturnType<typeof setTimeout>;
+      let intervalId: ReturnType<typeof setInterval>;
 
       // Timeout
       timeoutId = setTimeout(() => {
-        if (unsubscribe) unsubscribe();
+        clearInterval(intervalId);
         setStatus((prev) => ({ ...prev, isReconnecting: false }));
         resolve(false);
       }, timeoutMs);
 
-      // Écouter les changements
-      unsubscribe = NetInfo.addEventListener((state) => {
-        if (state.isConnected) {
+      // Vérifier toutes les 2 secondes
+      intervalId = setInterval(async () => {
+        const { isConnected: connected } = await checkNetworkConnectivity();
+        if (connected) {
           clearTimeout(timeoutId);
-          if (unsubscribe) unsubscribe();
+          clearInterval(intervalId);
           setStatus((prev) => ({ ...prev, isReconnecting: false }));
+          handleNetworkChange(true, 'unknown');
           resolve(true);
         }
-      });
+      }, 2000);
     });
-  }, []);
+  }, [handleNetworkChange]);
 
   // ----------------------------------------------------------
   // RETURN

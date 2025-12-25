@@ -9,7 +9,6 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Updates from 'expo-updates';
 
 // ============================================================
 // TYPES
@@ -19,6 +18,7 @@ interface ErrorBoundaryProps {
   children: ReactNode;
   fallback?: ReactNode;
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  onReset?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -56,21 +56,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     this.props.onError?.(error, errorInfo);
   }
 
-  handleReload = async (): Promise<void> => {
-    try {
-      // Essayer de recharger l'app via Expo Updates
-      await Updates.reloadAsync();
-    } catch (e) {
-      // Fallback: reset le state
-      this.setState({
-        hasError: false,
-        error: null,
-        errorInfo: null,
-      });
-    }
-  };
-
   handleReset = (): void => {
+    // Appeler le callback onReset si fourni
+    this.props.onReset?.();
+    
+    // Reset le state
     this.setState({
       hasError: false,
       error: null,
@@ -104,22 +94,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               L'application a rencontré un problème inattendu. Nous nous excusons pour la gêne occasionnée.
             </Text>
 
-            {/* Boutons */}
-            <View className="w-full space-y-3">
+            {/* Bouton */}
+            <View className="w-full">
               <TouchableOpacity
-                onPress={this.handleReload}
+                onPress={this.handleReset}
                 className="w-full bg-pink-500 py-4 rounded-xl active:bg-pink-600"
               >
                 <Text className="text-white font-semibold text-center text-lg">
-                  Relancer l'application
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={this.handleReset}
-                className="w-full bg-gray-200 py-4 rounded-xl active:bg-gray-300"
-              >
-                <Text className="text-gray-700 font-semibold text-center text-lg">
                   Réessayer
                 </Text>
               </TouchableOpacity>

@@ -8,14 +8,13 @@
  */
 
 import { useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { useErrorStore, AppError } from '../stores/errorStore';
 import { useToast } from '../components/ui/Toast';
 import { 
   ErrorCode, 
   getErrorInfo, 
   extractErrorCode, 
-  ErrorInfo 
 } from '../utils/errorMessages';
 
 // ============================================================
@@ -49,7 +48,6 @@ interface UseErrorReturn {
 // ============================================================
 
 export const useError = (): UseErrorReturn => {
-  const router = useRouter();
   const toast = useToast();
   
   // Store
@@ -111,6 +109,18 @@ export const useError = (): UseErrorReturn => {
   }, [clearErrors]);
 
   // ----------------------------------------------------------
+  // NAVIGATION HELPER
+  // ----------------------------------------------------------
+
+  const navigateToHome = useCallback((): void => {
+    router.replace('/home' as any);
+  }, []);
+
+  const navigateToLogin = useCallback((): void => {
+    router.replace('/login' as any);
+  }, []);
+
+  // ----------------------------------------------------------
   // GESTIONNAIRES SPÉCIFIQUES
   // ----------------------------------------------------------
 
@@ -130,14 +140,14 @@ export const useError = (): UseErrorReturn => {
         );
         // Rediriger après un délai
         setTimeout(() => {
-          router.replace('/(main)/home');
+          navigateToHome();
         }, 2000);
         break;
         
       case 'session/expired':
       case 'session/not-found':
         toast.error(appError.info.title, appError.info.message);
-        router.replace('/(main)/home');
+        navigateToHome();
         break;
         
       case 'session/already-started':
@@ -150,7 +160,7 @@ export const useError = (): UseErrorReturn => {
     }
     
     markAsHandled(appError.id);
-  }, [addError, toast, router, markAsHandled]);
+  }, [addError, toast, markAsHandled, navigateToHome]);
 
   /**
    * Gère les erreurs de média (expiré, upload/download failed)
@@ -223,11 +233,11 @@ export const useError = (): UseErrorReturn => {
     ];
     
     if (homeErrors.includes(code)) {
-      router.replace('/(main)/home');
+      navigateToHome();
     } else if (authErrors.includes(code)) {
-      router.replace('/(auth)/login');
+      navigateToLogin();
     }
-  }, [router]);
+  }, [navigateToHome, navigateToLogin]);
 
   // ----------------------------------------------------------
   // RETURN
