@@ -172,8 +172,6 @@ const generateAlternatives = (
       completed: false,
       completedBy: null,
       completedAt: null,
-      theme: c.theme,
-      toy: c.toy,
     },
   }));
 };
@@ -189,6 +187,7 @@ interface ConfettiPiece {
   rotate: Animated.Value;
   color: string;
   size: number;
+  initialX: number; // Store initial X position
 }
 
 function ConfettiAnimation({ active }: { active: boolean }) {
@@ -204,13 +203,15 @@ function ConfettiAnimation({ active }: { active: boolean }) {
     const newPieces: ConfettiPiece[] = [];
 
     for (let i = 0; i < 50; i++) {
+      const initialX = Math.random() * SCREEN_WIDTH;
       newPieces.push({
         id: i,
-        x: new Animated.Value(Math.random() * SCREEN_WIDTH),
+        x: new Animated.Value(initialX),
         y: new Animated.Value(-20),
         rotate: new Animated.Value(0),
         color: colors[Math.floor(Math.random() * colors.length)],
         size: Math.random() * 10 + 5,
+        initialX,
       });
     }
 
@@ -229,7 +230,7 @@ function ConfettiAnimation({ active }: { active: boolean }) {
           useNativeDriver: true,
         }),
         Animated.timing(piece.x, {
-          toValue: piece.x._value + (Math.random() - 0.5) * 200,
+          toValue: piece.initialX + (Math.random() - 0.5) * 200,
           duration,
           delay,
           useNativeDriver: true,
@@ -439,26 +440,6 @@ function ChallengeCard({
         <Text className="text-gray-800 text-lg text-center leading-7 px-2">
           {challenge.text}
         </Text>
-
-        {/* Thème et jouet si applicable */}
-        {(challenge.theme || challenge.toy) && (
-          <View className="flex-row justify-center gap-2 mt-4">
-            {challenge.theme && (
-              <View className="bg-purple-100 px-3 py-1 rounded-full">
-                <Text className="text-purple-600 text-xs font-medium">
-                  🎭 {challenge.theme}
-                </Text>
-              </View>
-            )}
-            {challenge.toy && (
-              <View className="bg-pink-100 px-3 py-1 rounded-full">
-                <Text className="text-pink-600 text-xs font-medium">
-                  🎀 {challenge.toy}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
 
         {/* Indicateur pour qui */}
         <View className="items-center mt-4">
