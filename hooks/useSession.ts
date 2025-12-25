@@ -10,15 +10,21 @@
  * LOGIQUE DE VALIDATION (FIX BUG couples même genre) :
  * - isChallengeForMe : Basé sur forPlayer (rôle) et NON sur forGender
  * - isMyTurn : C'est mon tour de VALIDER = le défi n'est PAS pour moi
+ * 
+ * PROMPT PARTNER-CHALLENGE :
+ * - Ajout pendingPartnerChallenge pour les demandes de défis partenaires
+ * - Ajout partnerIsPremium pour vérifier si les 2 joueurs sont premium
  */
 
 import { useEffect, useCallback, useRef, useState, useMemo } from "react";
 import { useGameStore } from "../stores/gameStore";
 import { sessionService } from "../services/session.service";
+import { userService } from "../services/user.service";
 import {
   Session,
   SessionChallenge,
   PlayerRole,
+  PendingPartnerChallenge,
   ApiResponse,
   MAX_CHALLENGE_CHANGES,
 } from "../types";
@@ -45,6 +51,12 @@ interface UseSessionReturn {
   isSessionActive: boolean;
   isSessionCompleted: boolean;
   isSessionAbandoned: boolean;
+
+  // PROMPT PARTNER-CHALLENGE : Nouvelles propriétés
+  pendingPartnerChallenge: PendingPartnerChallenge | null;
+  partnerIsPremium: boolean;
+  isPartnerChallengeRequestedByMe: boolean;
+  isPartnerChallengeForMeToCreate: boolean;
 
   // Actions
   completeChallenge: () => Promise<ApiResponse<SessionChallenge | null>>;
@@ -83,6 +95,9 @@ export const useSession = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubscribed, setIsSubscribed] = useState<boolean>(false);
+  
+  // PROMPT PARTNER-CHALLENGE : État premium du partenaire
+  const [partnerIsPremium, setPartnerIsPremium] = useState<boolean>(false);
 
   // Ref pour le cleanup du listener
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -129,6 +144,18 @@ export const useSession = ({
         setIsLoading(false);
         setError(null);
         setIsSubscribed(true);
+
+        // PROMPT PARTNER-CHALLENGE : Récupérer le statut premium du partenaire
+        const partnerId = isCreator ? session.partnerId : session.creatorId;
+        if (partnerId) {
+          userService.getUserDocument(partnerId).then((result) => {
+            if (result.success && result.data) {
+              setPartnerIsPremium(result.data.premium);
+            }
+          }).catch(() => {
+            // Ignorer les erreurs silencieusement
+          });
+        }
       },
       (errorMessage: string) => {
         console.error("[useSession] Session listener error:", errorMessage);
@@ -256,6 +283,34 @@ export const useSession = ({
   const isSessionActive = currentSession?.status === "active";
   const isSessionCompleted = currentSession?.status === "completed";
   const isSessionAbandoned = currentSession?.status === "abandoned";
+
+  // ----------------------------------------------------------
+  // PROMPT PARTNER-CHALLENGE : Nouvelles computed values
+  // ----------------------------------------------------------
+
+  /**
+   * Défi partenaire en attente
+   */
+  const pendingPartnerChallenge = useMemo((): PendingPartnerChallenge | null => {
+    return currentSession?.pendingPartnerChallenge || null;
+  }, [currentSession]);
+
+  /**
+   * Est-ce que la demande de défi partenaire a été faite par MOI ?
+   */
+  const isPartnerChallengeRequestedByMe = useMemo((): boolean => {
+    if (!pendingPartnerChallenge || !userId) return false;
+    return pendingPartnerChallenge.requestedBy === userId;
+  }, [pendingPartnerChallenge, userId]);
+
+  /**
+   * Est-ce que c'est à MOI de créer le défi partenaire ?
+   * (Le partenaire qui n'a PAS fait la demande doit créer)
+   */
+  const isPartnerChallengeForMeToCreate = useMemo((): boolean => {
+    if (!pendingPartnerChallenge || !userId) return false;
+    return pendingPartnerChallenge.requestedBy !== userId;
+  }, [pendingPartnerChallenge, userId]);
 
   // ----------------------------------------------------------
   // ACTIONS
@@ -389,6 +444,7 @@ export const useSession = ({
     setError(null);
     setIsLoading(false);
     setIsSubscribed(false);
+    setPartnerIsPremium(false);
 
     // Reset du store
     clearGame();
@@ -435,6 +491,12 @@ export const useSession = ({
     isSessionActive,
     isSessionCompleted,
     isSessionAbandoned,
+
+    // PROMPT PARTNER-CHALLENGE : Nouvelles propriétés
+    pendingPartnerChallenge,
+    partnerIsPremium,
+    isPartnerChallengeRequestedByMe,
+    isPartnerChallengeForMeToCreate,
 
     // Actions
     completeChallenge,

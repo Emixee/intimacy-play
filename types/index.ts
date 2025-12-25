@@ -3,6 +3,7 @@
  * 
  * PROMPT 4.3 : Ajout des types pour défis partenaires
  * PROMPT 1.3-v2 : Mise à jour des thèmes basés sur defis_couple_distance_v4.xlsx
+ * PROMPT PARTNER-CHALLENGE : Ajout UserChallenge pour stockage modération
  * 
  * Aligné avec le code existant ET FIRESTORE-SCHEMA.md
  * Compatible avec services/session.service.ts, services/game.service.ts, etc.
@@ -40,6 +41,9 @@ export type MessageType = "text" | "photo" | "video" | "audio";
 
 /** Langue de l'application */
 export type Language = "fr" | "en";
+
+/** Statut de modération d'un défi utilisateur */
+export type ModerationStatus = "pending" | "approved" | "rejected";
 
 // ============================================================
 // THÈMES (24 thèmes basés sur defis_couple_distance_v4.xlsx)
@@ -153,6 +157,12 @@ export const SESSION_CODE_EXPIRATION_HOURS = 24;
 
 /** Durée d'expiration des réactions (en secondes) */
 export const REACTION_EXPIRATION_SECONDS = 30;
+
+/** Longueur minimale du texte d'un défi personnalisé */
+export const MIN_CHALLENGE_TEXT_LENGTH = 10;
+
+/** Longueur maximale du texte d'un défi personnalisé */
+export const MAX_CHALLENGE_TEXT_LENGTH = 500;
 
 // ============================================================
 // NIVEAUX D'INTENSITÉ
@@ -344,10 +354,57 @@ export interface PendingPartnerChallenge {
   /** Type de média requis */
   type?: ChallengeType;
   /** ID du joueur qui a DEMANDÉ le défi (pas celui qui le crée) */
-  createdBy: string;
-  /** Rôle du joueur qui doit faire ce défi */
+  requestedBy: string;
+  /** Rôle du joueur qui doit faire ce défi (le demandeur) */
   forPlayer: PlayerRole;
   /** Date de création de la demande */
+  createdAt: Timestamp;
+}
+
+// ============================================================
+// USER CHALLENGE (Défis créés par utilisateurs - Modération)
+// ============================================================
+
+/**
+ * PROMPT PARTNER-CHALLENGE : Défi créé par un utilisateur
+ * Stocké dans /userChallenges/{challengeId}
+ * Permet la modération et l'ajout futur à la base de défis
+ */
+export interface UserChallenge {
+  /** ID du document */
+  id: string;
+  
+  /** Texte du défi */
+  text: string;
+  
+  /** Niveau d'intensité */
+  level: IntensityLevel;
+  
+  /** Type de média requis */
+  type: ChallengeType;
+  
+  /** Genre cible du défi */
+  forGender: Gender;
+  
+  /** ID de l'utilisateur qui a créé le défi */
+  createdBy: string;
+  
+  /** ID de la session où le défi a été créé */
+  sessionId: string;
+  
+  /** Statut de modération */
+  moderationStatus: ModerationStatus;
+  
+  /** Note du modérateur (optionnel) */
+  moderationNote?: string;
+  
+  /** ID du modérateur qui a traité (optionnel) */
+  moderatedBy?: string;
+  
+  /** Date de modération (optionnel) */
+  moderatedAt?: Timestamp;
+  
+  /** Date de création */
   createdAt: Timestamp;
 }
 

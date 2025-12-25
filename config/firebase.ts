@@ -11,6 +11,7 @@
  * - Messaging : Notifications push (FCM) - CONDITIONNEL (pas dans Expo Go)
  * 
  * CORRECTIF : Import conditionnel de messaging pour éviter crash dans Expo Go
+ * PROMPT PARTNER-CHALLENGE : Ajout collection userChallenges
  */
 
 import auth, { FirebaseAuthTypes } from "@react-native-firebase/auth";
@@ -110,6 +111,12 @@ export const arrayRemove = (...elements: any[]) => firestore.FieldValue.arrayRem
 
 export const usersCollection = () => firestore().collection("users");
 export const sessionsCollection = () => firestore().collection("sessions");
+
+/**
+ * PROMPT PARTNER-CHALLENGE : Collection des défis créés par utilisateurs
+ * Pour modération et ajout futur à la base de défis
+ */
+export const userChallengesCollection = () => firestore().collection("userChallenges");
 
 // ============================================================
 // HELPERS STORAGE

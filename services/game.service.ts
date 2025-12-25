@@ -3,6 +3,7 @@
  *
  * PROMPT 4.3 : Actions en jeu
  * PROMPT 7.3 : Intégration ads pour changements bonus
+ * PROMPT PARTNER-CHALLENGE : Sauvegarde des défis créés pour modération
  * 
  * Fonctionnalités :
  * - completeChallenge : Valider un défi
@@ -28,9 +29,13 @@ import {
   PlayerRole,
   IntensityLevel,
   ChallengeType,
+  Gender,
   ApiResponse,
+  PendingPartnerChallenge,
   MAX_CHALLENGE_CHANGES,
   MAX_BONUS_CHANGES,
+  MIN_CHALLENGE_TEXT_LENGTH,
+  MAX_CHALLENGE_TEXT_LENGTH,
 } from "../types";
 import { sessionService } from "./session.service";
 import {
@@ -40,28 +45,12 @@ import {
 } from "../utils/challengeSelector";
 // PROMPT 7.3 : Import du service de publicités
 import { adsService } from "./ads.service";
+// PROMPT PARTNER-CHALLENGE : Import du service de défis utilisateurs
+import { userChallengeService } from "./userChallenge.service";
 
 // ============================================================
 // TYPES SPÉCIFIQUES AU JEU
 // ============================================================
-
-/**
- * Défi en attente créé par le partenaire (Premium)
- */
-export interface PendingPartnerChallenge {
-  /** Texte du défi proposé */
-  text: string;
-  /** Niveau d'intensité */
-  level: IntensityLevel;
-  /** Type de média requis */
-  type: ChallengeType;
-  /** ID du partenaire qui a créé le défi */
-  createdBy: string;
-  /** Rôle du joueur qui doit faire ce défi */
-  forPlayer: PlayerRole;
-  /** Date de création */
-  createdAt: FirebaseFirestoreTypes.Timestamp;
-}
 
 /**
  * Résultat du changement de défi
@@ -113,7 +102,8 @@ const GAME_ERROR_MESSAGES: Record<string, string> = {
   BOTH_PREMIUM_REQUIRED: "Les deux joueurs doivent être Premium",
   PENDING_CHALLENGE_EXISTS: "Un défi partenaire est déjà en attente",
   NO_PENDING_CHALLENGE: "Aucun défi partenaire en attente",
-  INVALID_CHALLENGE_TEXT: "Le texte du défi est invalide",
+  INVALID_CHALLENGE_TEXT: "Le texte du défi doit contenir entre 10 et 500 caractères",
+  CANNOT_SUBMIT_OWN_REQUEST: "Vous ne pouvez pas soumettre votre propre demande",
   AD_FAILED: "La publicité n'a pas pu être affichée",
   AD_NOT_COMPLETED: "La publicité n'a pas été regardée en entier",
   UNKNOWN_ERROR: "Une erreur est survenue",
@@ -556,7 +546,7 @@ export const gameService = {
   },
 
   // ============================================================
-  // PARTNER CHALLENGE (Premium)
+  // PARTNER CHALLENGE (Premium) - PROMPT PARTNER-CHALLENGE
   // ============================================================
 
   /**
@@ -592,7 +582,7 @@ export const gameService = {
         };
       }
 
-      const session = sessionDoc.data() as any;
+      const session = sessionDoc.data() as Omit<Session, "id">;
       const userRole = getUserRole(session, userId);
 
       if (!userRole) {
@@ -612,9 +602,9 @@ export const gameService = {
 
       // Créer le placeholder pour le défi partenaire
       // Le partenaire devra le remplir avec submitPartnerChallenge
-      const pendingChallenge: Partial<PendingPartnerChallenge> = {
-        createdBy: userId,
-        forPlayer: userRole === "creator" ? "partner" : "creator", // Le demandeur fera le défi
+      const pendingChallenge: PendingPartnerChallenge = {
+        requestedBy: userId,
+        forPlayer: userRole, // Le demandeur fera le défi
         createdAt: firestore.Timestamp.now(),
       };
 
@@ -639,8 +629,10 @@ export const gameService = {
   /**
    * Soumet un défi personnalisé créé par le partenaire (Premium)
    * 
+   * PROMPT PARTNER-CHALLENGE : 
    * - Remplace le défi actuel par le texte du partenaire
    * - Marque createdByPartner = true
+   * - SAUVEGARDE le défi dans userChallenges pour modération
    */
   submitPartnerChallenge: async (
     sessionCode: string,
@@ -650,7 +642,11 @@ export const gameService = {
     type: ChallengeType = "texte"
   ): Promise<ApiResponse> => {
     // Validation du texte
-    if (!challengeText || challengeText.trim().length < 10) {
+    const trimmedText = challengeText.trim();
+    if (
+      trimmedText.length < MIN_CHALLENGE_TEXT_LENGTH ||
+      trimmedText.length > MAX_CHALLENGE_TEXT_LENGTH
+    ) {
       return {
         success: false,
         error: getErrorMessage("INVALID_CHALLENGE_TEXT"),
@@ -670,7 +666,7 @@ export const gameService = {
         };
       }
 
-      const session = sessionDoc.data() as any;
+      const session = sessionDoc.data() as Omit<Session, "id">;
       const userRole = getUserRole(session, userId);
 
       if (!userRole) {
@@ -688,14 +684,14 @@ export const gameService = {
         };
       }
 
-      const pending = session.pendingPartnerChallenge as PendingPartnerChallenge;
+      const pending = session.pendingPartnerChallenge;
 
       // Vérifier que c'est bien le bon partenaire qui soumet
-      // Le créateur du pending n'est PAS celui qui soumet
-      if (pending.createdBy === userId) {
+      // Le créateur de la demande (requestedBy) n'est PAS celui qui soumet
+      if (pending.requestedBy === userId) {
         return {
           success: false,
-          error: "Vous ne pouvez pas soumettre votre propre demande",
+          error: getErrorMessage("CANNOT_SUBMIT_OWN_REQUEST"),
         };
       }
 
@@ -703,8 +699,8 @@ export const gameService = {
       const currentIndex = session.currentChallengeIndex;
       const currentChallenge = session.challenges[currentIndex];
 
-      const partnerChallenge: SessionChallenge & { createdByPartner: boolean } = {
-        text: challengeText.trim(),
+      const partnerChallenge: SessionChallenge = {
+        text: trimmedText,
         level,
         type,
         forGender: currentChallenge.forGender,
@@ -722,6 +718,24 @@ export const gameService = {
       await sessionRef.update({
         challenges: updatedChallenges,
         pendingPartnerChallenge: null, // Supprimer le pending
+      });
+
+      // PROMPT PARTNER-CHALLENGE : Sauvegarder pour modération (en arrière-plan)
+      userChallengeService.saveUserChallenge({
+        text: trimmedText,
+        level,
+        type,
+        forGender: currentChallenge.forGender,
+        createdBy: userId,
+        sessionId: normalizedCode,
+      }).then((result) => {
+        if (result.success) {
+          console.log("[GameService] User challenge saved for moderation:", result.data);
+        } else {
+          console.warn("[GameService] Failed to save user challenge:", result.error);
+        }
+      }).catch((err) => {
+        console.warn("[GameService] Error saving user challenge:", err);
       });
 
       console.log(
@@ -758,7 +772,7 @@ export const gameService = {
         };
       }
 
-      const session = sessionDoc.data() as any;
+      const session = sessionDoc.data() as Omit<Session, "id">;
       const userRole = getUserRole(session, userId);
 
       if (!userRole) {
@@ -775,17 +789,14 @@ export const gameService = {
         };
       }
 
-      // Seul le créateur de la demande peut l'annuler
-      if (session.pendingPartnerChallenge.createdBy !== userId) {
-        return {
-          success: false,
-          error: "Seul le demandeur peut annuler",
-        };
-      }
+      // Seul le créateur de la demande ou le partenaire peut annuler
+      // (On permet aux deux pour plus de flexibilité)
 
       await sessionRef.update({
         pendingPartnerChallenge: null,
       });
+
+      console.log(`[GameService] Partner challenge request cancelled in session ${sessionCode}`);
 
       return { success: true };
     } catch (error: any) {
@@ -841,10 +852,6 @@ export const gameService = {
       });
 
       console.log(`[GameService] Session ${sessionCode} ended by ${userRole}`);
-
-      // NOTE: Le cleanup des médias sera déclenché par une Cloud Function
-      // qui écoute les changements de status sur les sessions
-      // Trigger: onUpdate -> if status changed to 'completed' -> cleanup media
 
       return { success: true };
     } catch (error: any) {

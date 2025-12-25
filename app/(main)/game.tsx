@@ -1,5 +1,5 @@
 /**
- * Écran de jeu principal - PROMPT 8.4 COMPLET
+ * Écran de jeu principal - PROMPT 8.4 COMPLET + PARTNER-CHALLENGE
  *
  * Affiche le défi actuel et gère la progression de la partie.
  * Utilise useSession pour le temps réel et les actions.
@@ -16,6 +16,11 @@
  * 6. Zone réactions (ReactionPicker + overlay)
  * 7. Zone chat (collapse/expand)
  * 8. Game Over avec confettis et stats
+ *
+ * PROMPT PARTNER-CHALLENGE :
+ * - Modal pour demander un défi au partenaire
+ * - Modal pour créer un défi personnalisé
+ * - Indicateur de demande en attente
  *
  * LOGIQUE (FIX BUG couples même genre) :
  * - isChallengeForMe : Basé sur forPlayer (rôle) → j'envoie la preuve
@@ -77,6 +82,9 @@ import {
   Reaction,
   MAX_CHALLENGE_CHANGES,
   MAX_BONUS_CHANGES,
+  MIN_CHALLENGE_TEXT_LENGTH,
+  MAX_CHALLENGE_TEXT_LENGTH,
+  INTENSITY_LEVELS,
 } from "../../types";
 
 // ============================================================
@@ -187,7 +195,7 @@ interface ConfettiPiece {
   rotate: Animated.Value;
   color: string;
   size: number;
-  initialX: number; // Store initial X position
+  initialX: number;
 }
 
 function ConfettiAnimation({ active }: { active: boolean }) {
@@ -217,7 +225,6 @@ function ConfettiAnimation({ active }: { active: boolean }) {
 
     setPieces(newPieces);
 
-    // Animer chaque confetti
     newPieces.forEach((piece, index) => {
       const duration = 3000 + Math.random() * 2000;
       const delay = index * 50;
@@ -434,6 +441,13 @@ function ChallengeCard({
         <View className="flex-row justify-center gap-2 mb-4">
           <LevelBadge level={challenge.level} size="sm" />
           <ChallengeTypeBadge type={challenge.type} size="sm" />
+          {challenge.createdByPartner && (
+            <View className="bg-purple-100 px-2 py-1 rounded-full">
+              <Text className="text-purple-600 text-xs font-medium">
+                👑 Créé par partenaire
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Texte du défi */}
@@ -465,6 +479,69 @@ function ChallengeCard({
 }
 
 /**
+ * PROMPT PARTNER-CHALLENGE : Indicateur de demande en attente
+ */
+function PendingPartnerChallengeIndicator({
+  isRequestedByMe,
+  onCancel,
+}: {
+  isRequestedByMe: boolean;
+  onCancel: () => void;
+}) {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.02,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+    return () => pulseAnim.stopAnimation();
+  }, []);
+
+  return (
+    <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+      <View className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4">
+        <View className="flex-row items-center">
+          <View className="w-10 h-10 rounded-full bg-purple-100 items-center justify-center">
+            <Text className="text-xl">✨</Text>
+          </View>
+          <View className="flex-1 ml-3">
+            <Text className="text-purple-800 font-semibold">
+              {isRequestedByMe
+                ? "Demande envoyée !"
+                : "Ton partenaire te demande de créer un défi !"}
+            </Text>
+            <Text className="text-purple-600 text-sm mt-0.5">
+              {isRequestedByMe
+                ? "En attente que ton partenaire crée le défi..."
+                : "Appuie sur le bouton ci-dessous pour créer"}
+            </Text>
+          </View>
+        </View>
+        {isRequestedByMe && (
+          <Pressable
+            onPress={onCancel}
+            className="mt-3 py-2 items-center border border-purple-300 rounded-lg"
+          >
+            <Text className="text-purple-600 font-medium">Annuler la demande</Text>
+          </Pressable>
+        )}
+      </View>
+    </Animated.View>
+  );
+}
+
+/**
  * Boutons d'action avec pub bonus et demande partenaire
  */
 function ActionButtons({
@@ -475,10 +552,13 @@ function ActionButtons({
   bonusUsed,
   isPremium,
   canRequestPartner,
+  hasPendingRequest,
+  isForMeToCreate,
   onComplete,
   onSkip,
   onWatchAd,
   onRequestPartner,
+  onCreatePartnerChallenge,
 }: {
   isChallengeForMe: boolean;
   isMyTurn: boolean;
@@ -487,34 +567,51 @@ function ActionButtons({
   bonusUsed: number;
   isPremium: boolean;
   canRequestPartner: boolean;
+  hasPendingRequest: boolean;
+  isForMeToCreate: boolean;
   onComplete: () => void;
   onSkip: () => void;
   onWatchAd: () => void;
   onRequestPartner: () => void;
+  onCreatePartnerChallenge: () => void;
 }) {
   const canValidate = isMyTurn && !isChallengeForMe;
-  const canChange = isChallengeForMe && changesRemaining > 0;
+  const canChange = isChallengeForMe && changesRemaining > 0 && !hasPendingRequest;
   const canWatchAdForBonus = !isPremium && bonusUsed < MAX_BONUS_CHANGES;
 
   return (
     <View className="gap-3">
+      {/* PROMPT PARTNER-CHALLENGE : Bouton créer défi si demande en attente pour moi */}
+      {isForMeToCreate && (
+        <Button
+          title="✨ Créer le défi personnalisé"
+          variant="primary"
+          size="lg"
+          fullWidth
+          onPress={onCreatePartnerChallenge}
+          icon={<Text className="text-white mr-2">👑</Text>}
+        />
+      )}
+
       {/* Bouton principal */}
-      <Button
-        title={
-          isChallengeForMe
-            ? "En attente de validation..."
-            : "Défi accompli ✓"
-        }
-        variant="primary"
-        size="lg"
-        fullWidth
-        disabled={!canValidate || isLoading}
-        loading={isLoading}
-        onPress={onComplete}
-      />
+      {!isForMeToCreate && (
+        <Button
+          title={
+            isChallengeForMe
+              ? "En attente de validation..."
+              : "Défi accompli ✓"
+          }
+          variant="primary"
+          size="lg"
+          fullWidth
+          disabled={!canValidate || isLoading}
+          loading={isLoading}
+          onPress={onComplete}
+        />
+      )}
 
       {/* Bouton Changer de défi */}
-      {isChallengeForMe && (
+      {isChallengeForMe && !hasPendingRequest && (
         <>
           <Button
             title={
@@ -552,7 +649,7 @@ function ActionButtons({
       )}
 
       {/* Bouton demander au partenaire (2 premium) */}
-      {canRequestPartner && isChallengeForMe && (
+      {canRequestPartner && isChallengeForMe && !hasPendingRequest && (
         <Pressable
           onPress={onRequestPartner}
           className="flex-row items-center justify-center bg-purple-50 py-3 rounded-xl border border-purple-200"
@@ -564,6 +661,184 @@ function ActionButtons({
         </Pressable>
       )}
     </View>
+  );
+}
+
+/**
+ * PROMPT PARTNER-CHALLENGE : Modal pour créer un défi personnalisé
+ */
+function CreatePartnerChallengeModal({
+  visible,
+  onSubmit,
+  onClose,
+}: {
+  visible: boolean;
+  onSubmit: (text: string, level: IntensityLevel, type: ChallengeType) => void;
+  onClose: () => void;
+}) {
+  const [challengeText, setChallengeText] = useState("");
+  const [selectedLevel, setSelectedLevel] = useState<IntensityLevel>(2);
+  const [selectedType, setSelectedType] = useState<ChallengeType>("texte");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isValid = challengeText.trim().length >= MIN_CHALLENGE_TEXT_LENGTH;
+  const charCount = challengeText.trim().length;
+
+  const handleSubmit = async () => {
+    if (!isValid || isSubmitting) return;
+    setIsSubmitting(true);
+    await onSubmit(challengeText, selectedLevel, selectedType);
+    setIsSubmitting(false);
+    setChallengeText("");
+  };
+
+  const handleClose = () => {
+    setChallengeText("");
+    setSelectedLevel(2);
+    setSelectedType("texte");
+    onClose();
+  };
+
+  const challengeTypes: { type: ChallengeType; emoji: string; label: string }[] = [
+    { type: "texte", emoji: "✍️", label: "Texte" },
+    { type: "photo", emoji: "📸", label: "Photo" },
+    { type: "audio", emoji: "🎤", label: "Audio" },
+    { type: "video", emoji: "🎬", label: "Vidéo" },
+  ];
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={handleClose}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        className="flex-1 justify-end bg-black/50"
+      >
+        <View className="bg-white rounded-t-3xl">
+          <SafeAreaView edges={["bottom"]}>
+            {/* Header */}
+            <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-100">
+              <Text className="text-xl font-bold text-gray-800">
+                ✨ Créer un défi
+              </Text>
+              <Pressable
+                onPress={handleClose}
+                className="w-8 h-8 items-center justify-center rounded-full bg-gray-100"
+              >
+                <Ionicons name="close" size={20} color="#374151" />
+              </Pressable>
+            </View>
+
+            <ScrollView className="max-h-[70vh] px-5 py-4">
+              {/* Instructions */}
+              <View className="bg-purple-50 rounded-xl p-4 mb-4">
+                <Text className="text-purple-700 text-sm">
+                  Crée un défi personnalisé pour ton partenaire ! Sois créatif(ve) 
+                  et assure-toi que le défi est réalisable et respectueux. 💕
+                </Text>
+              </View>
+
+              {/* Texte du défi */}
+              <Text className="text-gray-700 font-medium mb-2">
+                Texte du défi
+              </Text>
+              <TextInput
+                value={challengeText}
+                onChangeText={setChallengeText}
+                placeholder="Ex: Envoie-moi un message vocal où tu me dis ce que tu aimes chez moi..."
+                multiline
+                numberOfLines={4}
+                maxLength={MAX_CHALLENGE_TEXT_LENGTH}
+                className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800 mb-1"
+                style={{ minHeight: 100, textAlignVertical: "top" }}
+              />
+              <Text className={`text-xs mb-4 ${charCount < MIN_CHALLENGE_TEXT_LENGTH ? "text-red-500" : "text-gray-400"}`}>
+                {charCount}/{MAX_CHALLENGE_TEXT_LENGTH} caractères (min {MIN_CHALLENGE_TEXT_LENGTH})
+              </Text>
+
+              {/* Niveau d'intensité */}
+              <Text className="text-gray-700 font-medium mb-2">
+                Niveau d'intensité
+              </Text>
+              <View className="flex-row flex-wrap mb-4">
+                {INTENSITY_LEVELS.map((level) => (
+                  <Pressable
+                    key={level.level}
+                    onPress={() => setSelectedLevel(level.level)}
+                    className={`px-4 py-2 rounded-xl mr-2 mb-2 ${
+                      selectedLevel === level.level
+                        ? "bg-pink-500"
+                        : "bg-gray-100"
+                    }`}
+                  >
+                    <Text
+                      className={`font-medium ${
+                        selectedLevel === level.level
+                          ? "text-white"
+                          : "text-gray-700"
+                      }`}
+                    >
+                      {level.emoji} {level.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {/* Type de preuve */}
+              <Text className="text-gray-700 font-medium mb-2">
+                Type de preuve demandée
+              </Text>
+              <View className="flex-row flex-wrap mb-6">
+                {challengeTypes.map((item) => (
+                  <Pressable
+                    key={item.type}
+                    onPress={() => setSelectedType(item.type)}
+                    className={`px-4 py-2 rounded-xl mr-2 mb-2 ${
+                      selectedType === item.type
+                        ? "bg-pink-500"
+                        : "bg-gray-100"
+                    }`}
+                  >
+                    <Text
+                      className={`font-medium ${
+                        selectedType === item.type
+                          ? "text-white"
+                          : "text-gray-700"
+                      }`}
+                    >
+                      {item.emoji} {item.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Boutons */}
+            <View className="px-5 pb-4 pt-2 border-t border-gray-100">
+              <Button
+                title={isSubmitting ? "Envoi en cours..." : "Envoyer le défi 🚀"}
+                variant="primary"
+                size="lg"
+                fullWidth
+                disabled={!isValid || isSubmitting}
+                loading={isSubmitting}
+                onPress={handleSubmit}
+              />
+              <Button
+                title="Annuler"
+                variant="ghost"
+                size="md"
+                fullWidth
+                onPress={handleClose}
+              />
+            </View>
+          </SafeAreaView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -583,34 +858,27 @@ function ReactionsZone({
 }) {
   const [showPicker, setShowPicker] = useState(false);
 
-  // Hook pour l'overlay d'animations
   const { reactions, triggerReaction, removeReaction } = useReactionOverlay();
 
-  // Hook pour la sync Firebase des réactions
   const { sendReaction } = useSessionReactions({
     sessionCode,
     userId,
     isPremium,
     onPartnerReaction: (reaction) => {
-      // Animer la réaction du partenaire
       triggerReaction(reaction.emoji, true);
     },
   });
 
   const handleSelectReaction = async (emoji: Reaction) => {
-    // Animer localement
     triggerReaction(emoji);
-    // Envoyer à Firebase
     await sendReaction(emoji);
     setShowPicker(false);
   };
 
   return (
     <>
-      {/* Overlay des animations */}
       <ReactionOverlay reactions={reactions} onReactionComplete={removeReaction} />
 
-      {/* Barre de réactions rapides */}
       <View className="bg-white border-t border-gray-100 px-4 py-2">
         <View className="flex-row items-center justify-between">
           <QuickReactionsBar
@@ -621,7 +889,6 @@ function ReactionsZone({
         </View>
       </View>
 
-      {/* Modal Picker complet */}
       <Modal
         visible={showPicker}
         transparent
@@ -669,11 +936,9 @@ function ChatZone({
   const [isSending, setIsSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
-  // Écouter les messages
   useEffect(() => {
     const unsubscribe = chatService.subscribeToMessages(sessionCode, (msgs) => {
       setMessages(msgs);
-      // Scroll en bas quand nouveaux messages
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
@@ -682,7 +947,6 @@ function ChatZone({
     return () => unsubscribe();
   }, [sessionCode]);
 
-  // Marquer comme lu quand expanded
   useEffect(() => {
     if (expanded && messages.length > 0) {
       chatService.markAllAsRead(sessionCode, userId);
@@ -726,7 +990,6 @@ function ChatZone({
       className="bg-white border-t border-gray-100"
       style={{ maxHeight: 300 }}
     >
-      {/* Header chat */}
       <Pressable
         onPress={onToggle}
         className="flex-row items-center justify-between px-4 py-2 border-b border-gray-100"
@@ -735,7 +998,6 @@ function ChatZone({
         <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
       </Pressable>
 
-      {/* Liste messages */}
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -757,7 +1019,6 @@ function ChatZone({
         }
       />
 
-      {/* Input */}
       <View className="flex-row items-center px-3 py-2 border-t border-gray-100">
         <TextInput
           value={inputText}
@@ -1025,6 +1286,11 @@ export default function GameScreen() {
     changesRemaining,
     isSessionCompleted,
     isSessionAbandoned,
+    // PROMPT PARTNER-CHALLENGE
+    pendingPartnerChallenge,
+    partnerIsPremium,
+    isPartnerChallengeRequestedByMe,
+    isPartnerChallengeForMeToCreate,
     completeChallenge,
     skipChallenge,
     abandonSession,
@@ -1044,6 +1310,9 @@ export default function GameScreen() {
   const [chatExpanded, setChatExpanded] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
+  // PROMPT PARTNER-CHALLENGE
+  const [showCreateChallengeModal, setShowCreateChallengeModal] = useState(false);
+  const [isRequestingPartner, setIsRequestingPartner] = useState(false);
 
   // ----------------------------------------------------------
   // COMPUTED VALUES
@@ -1059,7 +1328,6 @@ export default function GameScreen() {
     return session?.challenges.map((c) => c.text) || [];
   }, [session]);
 
-  // Bonus déjà utilisés pour les changements
   const bonusUsed = useMemo(() => {
     if (!session || !myRole) return 0;
     return myRole === "creator"
@@ -1067,18 +1335,15 @@ export default function GameScreen() {
       : session.partnerBonusChanges || 0;
   }, [session, myRole]);
 
-  // Les 2 joueurs sont premium ? (pour demande partenaire)
+  // PROMPT PARTNER-CHALLENGE : Les 2 joueurs sont premium ?
   const canRequestPartner = useMemo(() => {
-    // TODO: Vérifier si le partenaire est aussi premium
-    // Pour l'instant, on désactive cette fonctionnalité
-    return false;
-  }, [isPremium]);
+    return isPremium && partnerIsPremium;
+  }, [isPremium, partnerIsPremium]);
 
   // ----------------------------------------------------------
   // EFFECTS
   // ----------------------------------------------------------
 
-  // Compter les messages non lus
   useEffect(() => {
     if (!code || !userData?.id) return;
 
@@ -1145,13 +1410,76 @@ export default function GameScreen() {
     setIsWatchingAd(false);
   }, [code, userData?.id]);
 
-  const handleRequestPartner = useCallback(() => {
+  // PROMPT PARTNER-CHALLENGE : Demander un défi au partenaire
+  const handleRequestPartner = useCallback(async () => {
+    if (!code || !userData?.id) return;
+
     Alert.alert(
-      "Fonctionnalité Premium 👑",
-      "Demandez à votre partenaire de créer un défi personnalisé pour vous !",
-      [{ text: "OK" }]
+      "Demander un défi personnalisé 👑",
+      "Ton partenaire va créer un défi sur mesure pour toi ! Cette fonctionnalité est disponible car vous êtes tous les deux Premium.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Demander",
+          onPress: async () => {
+            setIsRequestingPartner(true);
+            const result = await gameService.requestPartnerChallenge(
+              code,
+              userData.id,
+              isPremium,
+              partnerIsPremium
+            );
+
+            if (result.success) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } else {
+              Alert.alert("Erreur", result.error || "Impossible d'envoyer la demande.");
+            }
+            setIsRequestingPartner(false);
+          },
+        },
+      ]
     );
+  }, [code, userData?.id, isPremium, partnerIsPremium]);
+
+  // PROMPT PARTNER-CHALLENGE : Annuler une demande
+  const handleCancelPartnerRequest = useCallback(async () => {
+    if (!code || !userData?.id) return;
+
+    const result = await gameService.cancelPartnerChallengeRequest(code, userData.id);
+    if (!result.success) {
+      Alert.alert("Erreur", result.error || "Impossible d'annuler la demande.");
+    }
+  }, [code, userData?.id]);
+
+  // PROMPT PARTNER-CHALLENGE : Ouvrir le modal de création
+  const handleOpenCreateChallengeModal = useCallback(() => {
+    setShowCreateChallengeModal(true);
   }, []);
+
+  // PROMPT PARTNER-CHALLENGE : Soumettre le défi créé
+  const handleSubmitPartnerChallenge = useCallback(
+    async (text: string, level: IntensityLevel, type: ChallengeType) => {
+      if (!code || !userData?.id) return;
+
+      const result = await gameService.submitPartnerChallenge(
+        code,
+        userData.id,
+        text,
+        level,
+        type
+      );
+
+      if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setShowCreateChallengeModal(false);
+        Alert.alert("🎉 Défi envoyé !", "Ton partenaire va découvrir ton défi personnalisé !");
+      } else {
+        Alert.alert("Erreur", result.error || "Impossible d'envoyer le défi.");
+      }
+    },
+    [code, userData?.id]
+  );
 
   const handleQuit = useCallback(() => {
     Alert.alert(
@@ -1233,6 +1561,14 @@ export default function GameScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 20 }}
       >
+        {/* PROMPT PARTNER-CHALLENGE : Indicateur de demande en attente */}
+        {pendingPartnerChallenge && (
+          <PendingPartnerChallengeIndicator
+            isRequestedByMe={isPartnerChallengeRequestedByMe}
+            onCancel={handleCancelPartnerRequest}
+          />
+        )}
+
         {/* Indicateur de tour */}
         <TurnIndicator
           isChallengeForMe={isChallengeForMe}
@@ -1250,15 +1586,18 @@ export default function GameScreen() {
         <ActionButtons
           isChallengeForMe={isChallengeForMe}
           isMyTurn={isMyTurn}
-          isLoading={isCompleting || isWatchingAd}
+          isLoading={isCompleting || isWatchingAd || isRequestingPartner}
           changesRemaining={changesRemaining}
           bonusUsed={bonusUsed}
           isPremium={isPremium}
           canRequestPartner={canRequestPartner}
+          hasPendingRequest={!!pendingPartnerChallenge}
+          isForMeToCreate={isPartnerChallengeForMeToCreate}
           onComplete={handleComplete}
           onSkip={handleOpenAlternatives}
           onWatchAd={handleWatchAd}
           onRequestPartner={handleRequestPartner}
+          onCreatePartnerChallenge={handleOpenCreateChallengeModal}
         />
       </ScrollView>
 
@@ -1290,6 +1629,13 @@ export default function GameScreen() {
         alternatives={alternatives}
         onSelect={handleSelectAlternative}
         onClose={() => setShowAlternatives(false)}
+      />
+
+      {/* PROMPT PARTNER-CHALLENGE : Modal création défi */}
+      <CreatePartnerChallengeModal
+        visible={showCreateChallengeModal}
+        onSubmit={handleSubmitPartnerChallenge}
+        onClose={() => setShowCreateChallengeModal(false)}
       />
     </SafeAreaView>
   );
