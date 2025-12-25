@@ -9,8 +9,8 @@
  */
 
 import React from "react";
-import { View, Text, Image, Dimensions } from "react-native";
-import { Link, router } from "expo-router";
+import { View, Text, ScrollView, Dimensions } from "react-native";
+import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Button } from "../../components/ui";
@@ -92,12 +92,16 @@ export default function WelcomeScreen() {
   // ----------------------------------------------------------
 
   return (
-    <SafeAreaView className="flex-1 bg-pink-50">
+    <SafeAreaView className="flex-1 bg-pink-50" edges={["top", "left", "right"]}>
       <StatusBar style="dark" />
 
-      <View className="flex-1 px-6 py-8">
+      <ScrollView 
+        className="flex-1"
+        contentContainerClassName="px-6 py-8 flex-grow"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Section supérieure : Logo et titre */}
-        <View className="flex-1 items-center justify-center">
+        <View className="flex-1 items-center justify-center min-h-[280px]">
           {/* Logo animé */}
           <View className="mb-6">
             <View className="w-32 h-32 bg-gradient-to-br from-pink-400 to-pink-600 rounded-full items-center justify-center shadow-lg">
@@ -163,10 +167,10 @@ export default function WelcomeScreen() {
         </View>
 
         {/* Version */}
-        <Text className="text-center text-gray-400 text-xs mt-4">
+        <Text className="text-center text-gray-400 text-xs mt-4 mb-4">
           Version 1.0.0
         </Text>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
