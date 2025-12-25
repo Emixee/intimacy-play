@@ -7,6 +7,7 @@
  * - Les défis du partenaire sont filtrés selon ses préférences
  *
  * FIX: Comparaison case-insensitive pour les thèmes
+ * FIX: Fallback sur "Classique" pour les niveaux sans défis
  *
  * Fonctionnalités :
  * - Filtrage par thèmes sélectionnés (par joueur)
@@ -228,25 +229,60 @@ function calculateProgressionDistribution(
 // ============================================================
 
 /**
- * Filtre par thèmes sélectionnés
+ * Filtre par thèmes sélectionnés avec fallback sur "Classique"
+ * 
  * FIX: Comparaison case-insensitive (minuscules)
+ * FIX: Pour les niveaux sans défis dans les thèmes sélectionnés,
+ *      on ajoute automatiquement les défis "Classique" de ce niveau
+ * 
+ * @param challenges Liste des défis à filtrer
+ * @param selectedThemes Thèmes sélectionnés par l'utilisateur
+ * @returns Défis filtrés avec fallback Classique par niveau
  */
 function filterByThemes(
   challenges: ExtendedChallengeTemplate[],
   selectedThemes: string[]
 ): ExtendedChallengeTemplate[] {
-  // Si aucun thème sélectionné, inclure "classique" par défaut
-  if (selectedThemes.length === 0) {
-    return challenges.filter((c) => c.theme.toLowerCase() === "classique");
-  }
-  
   // Normaliser les thèmes sélectionnés en minuscules
-  const normalizedThemes = selectedThemes.map((t) => t.toLowerCase());
+  const normalizedThemes = selectedThemes.length > 0 
+    ? selectedThemes.map((t) => t.toLowerCase())
+    : ["classique"];
   
-  // Comparer en minuscules
-  return challenges.filter((c) => 
+  // Vérifier si "classique" est déjà dans les thèmes sélectionnés
+  const hasClassicSelected = normalizedThemes.includes("classique");
+  
+  // Filtrer par thèmes sélectionnés
+  const filteredByThemes = challenges.filter((c) => 
     normalizedThemes.includes(c.theme.toLowerCase())
   );
+  
+  // Si "classique" est déjà sélectionné, pas besoin de fallback
+  if (hasClassicSelected) {
+    return filteredByThemes;
+  }
+  
+  // Vérifier chaque niveau et ajouter "Classique" si aucun défi
+  const levels: IntensityLevel[] = [1, 2, 3, 4];
+  let result = [...filteredByThemes];
+  
+  for (const level of levels) {
+    const hasDefisAtLevel = filteredByThemes.some((c) => c.level === level);
+    
+    if (!hasDefisAtLevel) {
+      // Ajouter les défis "Classique" de ce niveau comme fallback
+      const classicAtLevel = challenges.filter(
+        (c) => c.theme.toLowerCase() === "classique" && c.level === level
+      );
+      result = [...result, ...classicAtLevel];
+      
+      console.log(
+        `[filterByThemes] Niveau ${level}: Aucun défi pour thèmes [${normalizedThemes.join(", ")}], ` +
+        `ajout de ${classicAtLevel.length} défis Classique comme fallback`
+      );
+    }
+  }
+  
+  return result;
 }
 
 /**
@@ -302,6 +338,13 @@ function filterByMaxLevel(
 /**
  * Applique tous les filtres pour UN joueur
  * PROMPT 1.3-v3 : Filtrage par préférences individuelles
+ * 
+ * Ordre des filtres :
+ * 1. Par genre (fait avant l'appel)
+ * 2. Par thèmes (avec fallback Classique)
+ * 3. Par jouets
+ * 4. Par médias
+ * 5. Par niveau max
  */
 function applyFiltersForPlayer(
   challenges: ExtendedChallengeTemplate[],
@@ -309,9 +352,17 @@ function applyFiltersForPlayer(
   maxLevel: IntensityLevel
 ): ExtendedChallengeTemplate[] {
   let filtered = challenges;
+  
+  // 1. Filtrer par thèmes (avec fallback Classique par niveau)
   filtered = filterByThemes(filtered, preferences.selectedThemes);
+  
+  // 2. Filtrer par jouets
   filtered = filterByToys(filtered, preferences.includeToys, preferences.availableToys);
+  
+  // 3. Filtrer par médias
   filtered = filterByMedia(filtered, preferences.mediaPreferences);
+  
+  // 4. Filtrer par niveau max
   filtered = filterByMaxLevel(filtered, maxLevel);
   
   return filtered;
@@ -406,6 +457,10 @@ export function selectChallenges(config: SelectionConfig): SelectionResult {
     3: shuffleArray(partnerPool.filter((c) => c.level === 3)),
     4: shuffleArray(partnerPool.filter((c) => c.level === 4)),
   };
+
+  // Log des défis par niveau pour debug
+  console.log(`[ChallengeSelector] Creator by level: N1=${creatorByLevel[1].length}, N2=${creatorByLevel[2].length}, N3=${creatorByLevel[3].length}, N4=${creatorByLevel[4].length}`);
+  console.log(`[ChallengeSelector] Partner by level: N1=${partnerByLevel[1].length}, N2=${partnerByLevel[2].length}, N3=${partnerByLevel[3].length}, N4=${partnerByLevel[4].length}`);
 
   // Sélectionner les défis selon la distribution
   const selectedChallenges: SessionChallenge[] = [];
@@ -667,6 +722,9 @@ export function selectChallengesForPlayer(
     4: shuffled.filter((c) => c.level === 4),
   };
 
+  // Log pour debug
+  console.log(`[selectChallengesForPlayer] By level: N1=${byLevel[1].length}, N2=${byLevel[2].length}, N3=${byLevel[3].length}, N4=${byLevel[4].length}`);
+
   // Sélectionner selon la progression
   const selectedChallenges: SessionChallenge[] = [];
   const usedIds = new Set<string>();
@@ -879,3 +937,41 @@ export default {
   canChangeChallenge,
   DEFAULT_PLAYER_PREFERENCES,
 };
+```
+
+---
+
+## 📋 Résumé des modifications
+
+| Modification | Description |
+|--------------|-------------|
+| **Fallback Classique** | Si un niveau n'a pas de défis pour les thèmes sélectionnés, les défis "Classique" de ce niveau sont automatiquement ajoutés |
+| **Case-insensitive** | Toutes les comparaisons de thèmes sont en minuscules |
+| **Logs améliorés** | Ajout de logs pour voir le fallback et le comptage par niveau |
+| **Skip si Classique sélectionné** | Si l'utilisateur a déjà sélectionné "Classique", pas de fallback nécessaire |
+
+---
+
+## 🔍 Exemple de comportement
+
+**Thèmes sélectionnés :** `["Sperme", "Cyprine"]`
+
+| Niveau | Défis Sperme/Cyprine | Résultat |
+|--------|---------------------|----------|
+| 1 | 0 | ➕ Ajout défis Classique N1 |
+| 2 | 0 | ➕ Ajout défis Classique N2 |
+| 3 | ~8 | ✅ Utilise Sperme/Cyprine |
+| 4 | ~40 | ✅ Utilise Sperme/Cyprine |
+
+**Progression :**
+- Début (N1-N2) → Défis Classique
+- Milieu (N3) → Défis Sperme/Cyprine
+- Fin (N4) → Défis Sperme/Cyprine
+
+---
+
+## 📂 Chemin d'installation
+```
+intimacy-play/
+└── utils/
+    └── challengeSelector.ts   ← REMPLACER CE FICHIER
