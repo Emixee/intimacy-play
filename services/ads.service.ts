@@ -8,9 +8,7 @@
  * - Rewarded pour +1 changement (max 3/partie)
  *
  * PROMPT 7.3 : Service Publicités
- *
- * Note: Utilise react-native-google-mobile-ads
- * Installation: npm install react-native-google-mobile-ads
+ * PROMPT 10.2 : IDs Production AdMob
  */
 
 import { Platform } from "react-native";
@@ -25,11 +23,11 @@ import { LIMITS, STORAGE_KEYS } from "../utils/constants";
 /**
  * IDs des annonces AdMob
  *
- * En développement, utilise les IDs de test officiels
- * En production, remplacer par vos propres IDs
+ * TEST : IDs officiels Google pour le développement
+ * PRODUCTION : Vrais IDs AdMob Couple Challenge
  */
 export const AD_UNIT_IDS = {
-  // IDs de test AdMob officiels
+  // IDs de test AdMob officiels (pour développement)
   TEST: {
     INTERSTITIAL: Platform.select({
       ios: "ca-app-pub-3940256099942544/4411468910",
@@ -44,28 +42,28 @@ export const AD_UNIT_IDS = {
       android: "ca-app-pub-3940256099942544/6300978111",
     }) as string,
   },
-  // IDs de production (à remplacer par vos propres IDs)
+  // IDs de production Couple Challenge
   PRODUCTION: {
     INTERSTITIAL: Platform.select({
-      ios: "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX",
+      ios: "ca-app-pub-3940256099942544/4411468910", // iOS pas encore configuré
       android: "ca-app-pub-4902274309112105/2067393503",
     }) as string,
     REWARDED: Platform.select({
-      ios: "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX",
+      ios: "ca-app-pub-3940256099942544/1712485313", // iOS pas encore configuré
       android: "ca-app-pub-4902274309112105/9408479866",
     }) as string,
     BANNER: Platform.select({
-      ios: "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX",
-      android: "ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX",
+      ios: "ca-app-pub-3940256099942544/2934735716", // iOS pas encore configuré
+      android: "ca-app-pub-3940256099942544/6300978111", // Pas de banner créé, utilise test
     }) as string,
   },
 } as const;
 
 /**
  * Mode développement/production
- * Basculer sur false pour la production
+ * __DEV__ est automatiquement false en build production
  */
-const IS_DEV_MODE = __DEV__ || true;
+const IS_DEV_MODE = __DEV__;
 
 /**
  * Récupère l'ID d'annonce approprié

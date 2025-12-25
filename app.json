@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "intimacyplay",
+    "scheme": "couplechallenge",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -22,6 +22,7 @@
         "backgroundColor": "#FFF5F7"
       },
       "package": "com.intimacyplay.app",
+      "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.INTERNET",
