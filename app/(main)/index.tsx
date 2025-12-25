@@ -4,6 +4,7 @@
  * FIX BUGS :
  * 1. Paramètre "code" au lieu de "sessionCode" pour navigation
  * 2. Code brut sans espace pour Firebase (affichage avec espace)
+ * 3. Afficher les options nouvelle partie MÊME avec session active
  */
 
 import React, { useEffect, useState } from "react";
@@ -367,6 +368,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 20 }}
       >
+        {/* Header avec nom et profil */}
         <View className="flex-row items-center justify-between px-6 py-4">
           <View>
             <Text className="text-gray-500 text-sm">Bonjour</Text>
@@ -385,10 +387,12 @@ export default function HomeScreen() {
           </Link>
         </View>
 
+        {/* Logo et titre */}
         <View className="mt-4">
           <AppLogo />
         </View>
 
+        {/* Session active (si présente) */}
         {activeSession && (
           <ActiveSessionCard 
             displayCode={activeSession.displayCode}
@@ -397,12 +401,19 @@ export default function HomeScreen() {
           />
         )}
 
-        {!activeSession && <NewGameCard />}
+        {/* 
+          FIX: TOUJOURS afficher les options nouvelle partie
+          Même quand une session est active 
+        */}
+        <NewGameCard />
 
+        {/* Comment ça marche */}
         <HowToSection />
 
+        {/* Bannière Premium (si pas premium) */}
         {!isPremium && <PremiumBanner />}
 
+        {/* Outils dev (en mode développement) */}
         {__DEV__ && <DevToolsSection onLogout={logout} />}
       </ScrollView>
     </SafeAreaView>
