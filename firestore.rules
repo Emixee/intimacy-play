@@ -48,9 +48,14 @@ service cloud.firestore {
         isValidGender(request.resource.data.gender) &&
         request.resource.data.email == request.auth.token.email;
       
+      // MODIFIÉ: Permettre la modification de l'email et du genre
+      // - L'email DOIT correspondre à l'email du token Firebase Auth (après updateEmail)
+      // - Le genre doit être valide (homme/femme)
+      // - createdAt ne peut jamais être modifié
       allow update: if isOwner(userId) &&
-        request.resource.data.email == resource.data.email &&
-        request.resource.data.createdAt == resource.data.createdAt;
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        isValidGender(request.resource.data.gender);
       
       allow delete: if isOwner(userId);
     }

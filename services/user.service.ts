@@ -1,14 +1,19 @@
 /**
  * Service de gestion des utilisateurs Firestore
  *
+ * PROMPT PROFILE-EDIT : Ajout des méthodes pour modifier email et genre
+ *
  * Gère toutes les opérations liées aux profils utilisateurs :
  * - CRUD des documents utilisateurs
+ * - Modification de l'email (Firebase Auth + Firestore)
+ * - Modification du genre
  * - Écoute temps réel des profils
  * - Gestion des abonnements Premium
  * - Mise à jour des préférences
  */
 
 import { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
+import { auth } from "../config/firebase";
 import {
   serverTimestamp,
   toTimestamp,
@@ -40,6 +45,23 @@ export interface PremiumUpdateData {
   premiumPlan: PremiumPlan | null;
   premiumUntil: Date | null;
 }
+
+// ============================================================
+// MESSAGES D'ERREUR EN FRANÇAIS
+// ============================================================
+
+const USER_ERROR_MESSAGES: Record<string, string> = {
+  "auth/email-already-in-use": "Cette adresse email est déjà utilisée",
+  "auth/invalid-email": "Adresse email invalide",
+  "auth/requires-recent-login": "Veuillez vous reconnecter pour modifier l'email",
+  "auth/operation-not-allowed": "Opération non autorisée",
+  "firestore/not-found": "Profil utilisateur introuvable",
+  "firestore/permission-denied": "Vous n'avez pas la permission de modifier ce profil",
+};
+
+const getErrorMessage = (errorCode: string): string => {
+  return USER_ERROR_MESSAGES[errorCode] || "Une erreur est survenue";
+};
 
 // ============================================================
 // SERVICE UTILISATEUR
@@ -209,6 +231,123 @@ export const userService = {
       return {
         success: false,
         error: "Erreur lors de la mise à jour du profil",
+      };
+    }
+  },
+
+  // ----------------------------------------------------------
+  // MODIFICATION DE L'EMAIL (PROMPT PROFILE-EDIT)
+  // ----------------------------------------------------------
+
+  /**
+   * Met à jour l'email de l'utilisateur
+   * 
+   * IMPORTANT: Cette opération modifie :
+   * 1. L'email dans Firebase Auth
+   * 2. L'email dans le document Firestore
+   * 
+   * Nécessite une connexion récente (< 5 minutes)
+   *
+   * @param uid - UID de l'utilisateur
+   * @param newEmail - Nouvel email
+   * @returns ApiResponse void
+   */
+  async updateEmail(uid: string, newEmail: string): Promise<ApiResponse> {
+    try {
+      const currentUser = auth().currentUser;
+
+      if (!currentUser || currentUser.uid !== uid) {
+        return {
+          success: false,
+          error: "Utilisateur non connecté",
+        };
+      }
+
+      // Validation basique de l'email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newEmail)) {
+        return {
+          success: false,
+          error: "Format d'email invalide",
+        };
+      }
+
+      console.log("[UserService] Updating email to:", newEmail);
+
+      // 1. Mettre à jour dans Firebase Auth
+      // Cela peut lever une erreur si la connexion n'est pas récente
+      await currentUser.updateEmail(newEmail);
+
+      // 2. Mettre à jour dans Firestore
+      // La règle Firestore vérifie que l'email correspond au token auth
+      await usersCollection().doc(uid).update({
+        email: newEmail,
+      });
+
+      // 3. Envoyer un email de vérification au nouvel email
+      await currentUser.sendEmailVerification();
+
+      console.log("[UserService] Email updated successfully for:", uid);
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("[UserService] Update email error:", error);
+
+      return {
+        success: false,
+        error: getErrorMessage(error.code),
+        code: error.code,
+      };
+    }
+  },
+
+  // ----------------------------------------------------------
+  // MODIFICATION DU GENRE (PROMPT PROFILE-EDIT)
+  // ----------------------------------------------------------
+
+  /**
+   * Met à jour le genre de l'utilisateur
+   * 
+   * IMPORTANT: Le changement de genre affectera :
+   * - Les défis proposés dans les futures sessions
+   * - Les défis sont filtrés par genre
+   *
+   * @param uid - UID de l'utilisateur
+   * @param newGender - Nouveau genre (homme/femme)
+   * @returns ApiResponse void
+   */
+  async updateGender(uid: string, newGender: Gender): Promise<ApiResponse> {
+    try {
+      // Validation du genre
+      if (newGender !== "homme" && newGender !== "femme") {
+        return {
+          success: false,
+          error: "Genre invalide",
+        };
+      }
+
+      console.log("[UserService] Updating gender to:", newGender);
+
+      await usersCollection().doc(uid).update({
+        gender: newGender,
+      });
+
+      console.log("[UserService] Gender updated successfully for:", uid);
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("[UserService] Update gender error:", error);
+
+      if (error.code === "firestore/not-found") {
+        return {
+          success: false,
+          error: "Profil utilisateur introuvable",
+        };
+      }
+
+      return {
+        success: false,
+        error: "Erreur lors de la mise à jour du genre",
       };
     }
   },
