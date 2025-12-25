@@ -8,7 +8,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { View, Text, Dimensions, Image, StyleSheet } from 'react-native';
+import { View, Text, Dimensions, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useAnimatedStyle,
@@ -19,6 +19,7 @@ import Animated, {
   withDelay,
   Easing,
   runOnJS,
+  type SharedValue,
 } from 'react-native-reanimated';
 import LottieView from 'lottie-react-native';
 
@@ -190,7 +191,7 @@ const LoadingDots: React.FC = () => {
   const dot3Opacity = useSharedValue(0.3);
 
   useEffect(() => {
-    const animateDot = (value: Animated.SharedValue<number>, delay: number) => {
+    const animateDot = (value: SharedValue<number>, delay: number) => {
       value.value = withDelay(
         delay,
         withRepeat(
