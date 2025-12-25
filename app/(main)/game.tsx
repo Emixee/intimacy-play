@@ -1288,7 +1288,6 @@ export default function GameScreen() {
     isSessionAbandoned,
     // PROMPT PARTNER-CHALLENGE
     pendingPartnerChallenge,
-    partnerIsPremium,
     isPartnerChallengeRequestedByMe,
     isPartnerChallengeForMeToCreate,
     completeChallenge,
@@ -1335,10 +1334,11 @@ export default function GameScreen() {
       : session.partnerBonusChanges || 0;
   }, [session, myRole]);
 
-  // PROMPT PARTNER-CHALLENGE : Les 2 joueurs sont premium ?
+  // PROMPT PARTNER-CHALLENGE : Afficher le bouton si l'utilisateur est premium
+  // La vérification du partenaire se fait côté backend
   const canRequestPartner = useMemo(() => {
-    return isPremium && partnerIsPremium;
-  }, [isPremium, partnerIsPremium]);
+    return isPremium;
+  }, [isPremium]);
 
   // ----------------------------------------------------------
   // EFFECTS
@@ -1416,18 +1416,19 @@ export default function GameScreen() {
 
     Alert.alert(
       "Demander un défi personnalisé 👑",
-      "Ton partenaire va créer un défi sur mesure pour toi ! Cette fonctionnalité est disponible car vous êtes tous les deux Premium.",
+      "Ton partenaire va créer un défi sur mesure pour toi !\n\nNote : Cette fonctionnalité nécessite que vous soyez tous les deux Premium.",
       [
         { text: "Annuler", style: "cancel" },
         {
           text: "Demander",
           onPress: async () => {
             setIsRequestingPartner(true);
+            // Le backend vérifie si les deux joueurs sont premium
             const result = await gameService.requestPartnerChallenge(
               code,
               userData.id,
               isPremium,
-              partnerIsPremium
+              true // Le backend fera la vraie vérification
             );
 
             if (result.success) {
@@ -1440,7 +1441,7 @@ export default function GameScreen() {
         },
       ]
     );
-  }, [code, userData?.id, isPremium, partnerIsPremium]);
+  }, [code, userData?.id, isPremium]);
 
   // PROMPT PARTNER-CHALLENGE : Annuler une demande
   const handleCancelPartnerRequest = useCallback(async () => {

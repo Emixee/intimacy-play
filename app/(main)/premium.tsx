@@ -9,6 +9,7 @@
  * - Lien restauration et CGV
  *
  * PROMPT 7.2 : Écran Premium
+ * PROMPT PARTNER-CHALLENGE : Ajout fonctionnalité défis personnalisés
  */
 
 import React, { useState, useEffect } from "react";
@@ -38,7 +39,10 @@ import { PRICING, PREMIUM_FEATURES } from "../../utils/constants";
 /** URL des CGV */
 const CGV_URL = "https://intimacy-play.com/terms";
 
-/** Tableau comparatif - Corrigé selon les règles business */
+/** 
+ * Tableau comparatif - Corrigé selon les règles business
+ * PROMPT PARTNER-CHALLENGE : Ajout défis personnalisés par partenaire
+ */
 const COMPARISON_TABLE = [
   { feature: "Niveaux 1-3 (Romantique, Sensuel, Érotique)", free: true, premium: true },
   { feature: "Niveau 4 (Explicite) 🔥", free: false, premium: true },
@@ -46,11 +50,14 @@ const COMPARISON_TABLE = [
   { feature: "22 thèmes exclusifs", free: false, premium: true },
   { feature: "Jusqu'à 15 défis par session", free: true, premium: true },
   { feature: "Jusqu'à 50 défis par session", free: false, premium: true },
+  { feature: "3 changements de défi", free: true, premium: true },
+  { feature: "Changements illimités", free: false, premium: true },
   { feature: "3 parties par jour", free: true, premium: false },
   { feature: "Parties illimitées", free: false, premium: true },
   { feature: "4 réactions de base", free: true, premium: true },
   { feature: "6 réactions exclusives", free: false, premium: true },
   { feature: "Défis avec jouets", free: false, premium: true },
+  { feature: "Défis personnalisés par partenaire 👑", free: false, premium: true },
   { feature: "Sans publicité", free: false, premium: true },
 ];
 

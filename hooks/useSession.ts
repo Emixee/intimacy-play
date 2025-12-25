@@ -19,7 +19,6 @@
 import { useEffect, useCallback, useRef, useState, useMemo } from "react";
 import { useGameStore } from "../stores/gameStore";
 import { sessionService } from "../services/session.service";
-import { userService } from "../services/user.service";
 import {
   Session,
   SessionChallenge,
@@ -145,17 +144,12 @@ export const useSession = ({
         setError(null);
         setIsSubscribed(true);
 
-        // PROMPT PARTNER-CHALLENGE : Récupérer le statut premium du partenaire
-        const partnerId = isCreator ? session.partnerId : session.creatorId;
-        if (partnerId) {
-          userService.getUserDocument(partnerId).then((result) => {
-            if (result.success && result.data) {
-              setPartnerIsPremium(result.data.premium);
-            }
-          }).catch(() => {
-            // Ignorer les erreurs silencieusement
-          });
-        }
+        // PROMPT PARTNER-CHALLENGE : Le statut premium du partenaire
+        // NOTE: On ne peut pas lire le document du partenaire (règles Firestore)
+        // La vérification se fait côté game.service.ts via une Cloud Function
+        // ou en stockant isPremium dans la session lors du join
+        // Pour l'instant, on laisse partnerIsPremium à false
+        // La vraie vérification se fera au moment de la demande
       },
       (errorMessage: string) => {
         console.error("[useSession] Session listener error:", errorMessage);
@@ -297,10 +291,11 @@ export const useSession = ({
 
   /**
    * Est-ce que la demande de défi partenaire a été faite par MOI ?
+   * Note: createdBy = ID du demandeur
    */
   const isPartnerChallengeRequestedByMe = useMemo((): boolean => {
     if (!pendingPartnerChallenge || !userId) return false;
-    return pendingPartnerChallenge.requestedBy === userId;
+    return pendingPartnerChallenge.createdBy === userId;
   }, [pendingPartnerChallenge, userId]);
 
   /**
@@ -309,7 +304,7 @@ export const useSession = ({
    */
   const isPartnerChallengeForMeToCreate = useMemo((): boolean => {
     if (!pendingPartnerChallenge || !userId) return false;
-    return pendingPartnerChallenge.requestedBy !== userId;
+    return pendingPartnerChallenge.createdBy !== userId;
   }, [pendingPartnerChallenge, userId]);
 
   // ----------------------------------------------------------

@@ -65,9 +65,9 @@ export const userChallengeService = {
    * Sauvegarde un défi créé par un utilisateur
    * Le défi est stocké avec le statut "pending" pour modération
    */
-  async saveUserChallenge(
+  saveUserChallenge: async (
     data: CreateUserChallengeData
-  ): Promise<ApiResponse<string>> {
+  ): Promise<ApiResponse<string>> => {
     try {
       // Validation basique
       if (!data.text || data.text.trim().length < 10) {
@@ -110,10 +110,10 @@ export const userChallengeService = {
   /**
    * Récupère les défis créés par un utilisateur
    */
-  async getUserChallenges(
+  getUserChallenges: async (
     userId: string,
     limit: number = 20
-  ): Promise<ApiResponse<UserChallenge[]>> {
+  ): Promise<ApiResponse<UserChallenge[]>> => {
     try {
       const snapshot = await userChallengesCollection()
         .where("createdBy", "==", userId)
@@ -143,9 +143,9 @@ export const userChallengeService = {
    * Récupère les défis en attente de modération
    * (Pour le panel admin futur)
    */
-  async getPendingChallenges(
+  getPendingChallenges: async (
     limit: number = 50
-  ): Promise<ApiResponse<UserChallenge[]>> {
+  ): Promise<ApiResponse<UserChallenge[]>> => {
     try {
       const snapshot = await userChallengesCollection()
         .where("moderationStatus", "==", "pending")
@@ -175,12 +175,12 @@ export const userChallengeService = {
    * Met à jour le statut de modération d'un défi
    * (Pour le panel admin futur)
    */
-  async updateModerationStatus(
+  updateModerationStatus: async (
     challengeId: string,
     status: ModerationStatus,
     moderatorId: string,
     note?: string
-  ): Promise<ApiResponse> {
+  ): Promise<ApiResponse> => {
     try {
       const updateData: Partial<UserChallenge> = {
         moderationStatus: status,
@@ -213,14 +213,14 @@ export const userChallengeService = {
   /**
    * Récupère les statistiques des défis utilisateurs
    */
-  async getStats(): Promise
+  getStats: async (): Promise<
     ApiResponse<{
       total: number;
       pending: number;
       approved: number;
       rejected: number;
     }>
-  > {
+  > => {
     try {
       // Note: Pour de meilleures performances, utiliser des compteurs agrégés
       // ou Cloud Functions pour maintenir ces stats

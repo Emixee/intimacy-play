@@ -2,6 +2,7 @@
  * Constantes globales - Intimacy Play
  * 
  * PROMPT 1.3-v2 : Thèmes basés sur defis_couple_distance_v4.xlsx (24 thèmes)
+ * PROMPT PARTNER-CHALLENGE : Ajout fonctionnalité défis personnalisés
  * 
  * Contient toutes les constantes de configuration de l'application :
  * - App info
@@ -295,7 +296,7 @@ export const LIMITS = {
   
   // Défis
   CHALLENGES: {
-    FREE: { min: 5, max: 10 },
+    FREE: { min: 5, max: 15 },
     PREMIUM: { min: 5, max: 50 },
     DEFAULT: 10,
   },
@@ -330,6 +331,10 @@ export const LIMITS = {
   DISPLAY_NAME_MIN_LENGTH: 2,
   DISPLAY_NAME_MAX_LENGTH: 30,
   MIN_AGE: 18,
+  
+  // Défis personnalisés (PROMPT PARTNER-CHALLENGE)
+  PARTNER_CHALLENGE_MIN_LENGTH: 10,
+  PARTNER_CHALLENGE_MAX_LENGTH: 500,
 } as const;
 
 // ============================================================
@@ -362,7 +367,10 @@ export const PRICING = {
   },
 } as const;
 
-/** Avantages Premium */
+/** 
+ * Avantages Premium 
+ * PROMPT PARTNER-CHALLENGE : Ajout défis personnalisés
+ */
 export const PREMIUM_FEATURES = [
   {
     id: "all_levels",
@@ -381,6 +389,18 @@ export const PREMIUM_FEATURES = [
     icon: "♾️",
     title: "Jusqu'à 50 défis",
     description: "Sessions plus longues et intenses",
+  },
+  {
+    id: "partner_challenges",
+    icon: "✍️",
+    title: "Défis personnalisés",
+    description: "Ton partenaire crée des défis sur mesure",
+  },
+  {
+    id: "unlimited_changes",
+    icon: "🔄",
+    title: "Changements illimités",
+    description: "Change de défi autant que tu veux",
   },
   {
     id: "exclusive_reactions",
@@ -542,8 +562,15 @@ export const ERROR_MESSAGES: Record<string, string> = {
   
   // Premium
   PREMIUM_REQUIRED: "Cette fonctionnalité nécessite un abonnement Premium",
+  BOTH_PREMIUM_REQUIRED: "Les deux joueurs doivent être Premium",
   PURCHASE_FAILED: "L'achat a échoué, veuillez réessayer",
   PURCHASE_CANCELLED: "Achat annulé",
+  
+  // Partner Challenge (PROMPT PARTNER-CHALLENGE)
+  PENDING_CHALLENGE_EXISTS: "Un défi partenaire est déjà en attente",
+  NO_PENDING_CHALLENGE: "Aucun défi partenaire en attente",
+  INVALID_CHALLENGE_TEXT: "Le texte du défi doit contenir entre 10 et 500 caractères",
+  CANNOT_SUBMIT_OWN_REQUEST: "Vous ne pouvez pas soumettre votre propre demande",
   
   // Général
   UNKNOWN: "Une erreur est survenue",

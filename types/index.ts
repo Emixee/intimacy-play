@@ -345,6 +345,8 @@ export interface SessionChallenge {
 /**
  * PROMPT 4.3 : Défi en attente créé par le partenaire
  * Stocké dans session.pendingPartnerChallenge
+ * 
+ * NOTE: createdBy = ID du joueur qui a DEMANDÉ le défi (pas celui qui le crée)
  */
 export interface PendingPartnerChallenge {
   /** Texte du défi proposé (optionnel, rempli par le partenaire) */
@@ -354,8 +356,8 @@ export interface PendingPartnerChallenge {
   /** Type de média requis */
   type?: ChallengeType;
   /** ID du joueur qui a DEMANDÉ le défi (pas celui qui le crée) */
-  requestedBy: string;
-  /** Rôle du joueur qui doit faire ce défi (le demandeur) */
+  createdBy: string;
+  /** Rôle du joueur qui doit faire ce défi */
   forPlayer: PlayerRole;
   /** Date de création de la demande */
   createdAt: Timestamp;

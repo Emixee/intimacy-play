@@ -362,13 +362,9 @@ export const gameService = {
       }
 
       // Générer les alternatives
-      const config: SelectionConfig = {
-        creatorGender: session.creatorGender,
-        partnerGender: session.partnerGender || session.creatorGender,
-        count: session.challengeCount,
-        startIntensity: session.startIntensity,
-        isPremium,
-        selectedThemes: [],
+      // Utilise les préférences par défaut car on n'a pas accès aux préférences individuelles ici
+      const defaultPreferences = {
+        selectedThemes: ["classique"],
         includeToys: false,
         availableToys: [],
         mediaPreferences: {
@@ -376,6 +372,16 @@ export const gameService = {
           audio: true,
           video: true,
         },
+      };
+
+      const config: SelectionConfig = {
+        creatorGender: session.creatorGender,
+        partnerGender: session.partnerGender || session.creatorGender,
+        count: session.challengeCount,
+        startIntensity: session.startIntensity,
+        isPremium,
+        creatorPreferences: defaultPreferences,
+        partnerPreferences: defaultPreferences,
       };
 
       const alternativesResult = getAlternatives(
@@ -603,7 +609,7 @@ export const gameService = {
       // Créer le placeholder pour le défi partenaire
       // Le partenaire devra le remplir avec submitPartnerChallenge
       const pendingChallenge: PendingPartnerChallenge = {
-        requestedBy: userId,
+        createdBy: userId, // ID du demandeur
         forPlayer: userRole, // Le demandeur fera le défi
         createdAt: firestore.Timestamp.now(),
       };
@@ -687,8 +693,8 @@ export const gameService = {
       const pending = session.pendingPartnerChallenge;
 
       // Vérifier que c'est bien le bon partenaire qui soumet
-      // Le créateur de la demande (requestedBy) n'est PAS celui qui soumet
-      if (pending.requestedBy === userId) {
+      // Le créateur de la demande (createdBy) n'est PAS celui qui soumet
+      if (pending.createdBy === userId) {
         return {
           success: false,
           error: getErrorMessage("CANNOT_SUBMIT_OWN_REQUEST"),
