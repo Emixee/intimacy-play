@@ -576,7 +576,8 @@ function ActionButtons({
   onCreatePartnerChallenge: () => void;
 }) {
   const canValidate = isMyTurn && !isChallengeForMe;
-  const canChange = isChallengeForMe && changesRemaining > 0 && !hasPendingRequest;
+  // FIX: isPremium = illimité, sinon vérifier changesRemaining
+  const canChange = isChallengeForMe && (isPremium || changesRemaining > 0) && !hasPendingRequest;
   const canWatchAdForBonus = !isPremium && bonusUsed < MAX_BONUS_CHANGES;
 
   return (
@@ -1284,6 +1285,7 @@ export default function GameScreen() {
     progress,
     completedCount,
     changesRemaining,
+    isUnlimitedChanges,
     isSessionCompleted,
     isSessionAbandoned,
     // PROMPT PARTNER-CHALLENGE
@@ -1297,6 +1299,7 @@ export default function GameScreen() {
   } = useSession({
     sessionCode: code || null,
     userId: userData?.id || null,
+    isPremium, // FIX: Passer isPremium pour les changements illimités
   });
 
   // ----------------------------------------------------------

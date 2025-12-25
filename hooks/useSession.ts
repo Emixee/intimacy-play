@@ -14,6 +14,11 @@
  * PROMPT PARTNER-CHALLENGE :
  * - Ajout pendingPartnerChallenge pour les demandes de défis partenaires
  * - Ajout partnerIsPremium pour vérifier si les 2 joueurs sont premium
+ * 
+ * FIX CHANGEMENTS ILLIMITÉS PREMIUM :
+ * - Ajout isPremium en paramètre
+ * - changesRemaining retourne Infinity pour Premium
+ * - skipChallenge passe isPremium à swapChallenge
  */
 
 import { useEffect, useCallback, useRef, useState, useMemo } from "react";
@@ -47,6 +52,7 @@ interface UseSessionReturn {
   progress: number;
   completedCount: number;
   changesRemaining: number;
+  isUnlimitedChanges: boolean;
   isSessionActive: boolean;
   isSessionCompleted: boolean;
   isSessionAbandoned: boolean;
@@ -69,6 +75,8 @@ interface UseSessionParams {
   sessionCode: string | null;
   userId: string | null;
   autoSubscribe?: boolean;
+  /** FIX: Ajout du statut premium pour les changements illimités */
+  isPremium?: boolean;
 }
 
 // ============================================================
@@ -79,6 +87,7 @@ export const useSession = ({
   sessionCode,
   userId,
   autoSubscribe = true,
+  isPremium = false,
 }: UseSessionParams): UseSessionReturn => {
   // Store
   const {
@@ -253,9 +262,26 @@ export const useSession = ({
   }, [currentSession]);
 
   /**
+   * FIX CHANGEMENTS ILLIMITÉS PREMIUM
+   * Si Premium, retourne true pour isUnlimitedChanges
+   */
+  const isUnlimitedChanges = useMemo((): boolean => {
+    return isPremium;
+  }, [isPremium]);
+
+  /**
    * Nombre de changements restants pour ce joueur
+   * 
+   * FIX CHANGEMENTS ILLIMITÉS PREMIUM :
+   * - Si Premium : retourne Infinity
+   * - Sinon : calcule normalement
    */
   const changesRemaining = useMemo((): number => {
+    // Premium = illimité
+    if (isPremium) {
+      return Infinity;
+    }
+
     if (!currentSession || !myRole) return 0;
 
     const changesUsed =
@@ -269,7 +295,7 @@ export const useSession = ({
         : currentSession.partnerBonusChanges || 0;
 
     return MAX_CHALLENGE_CHANGES + bonusChanges - changesUsed;
-  }, [currentSession, myRole]);
+  }, [currentSession, myRole, isPremium]);
 
   /**
    * État de la session
@@ -356,6 +382,10 @@ export const useSession = ({
 
   /**
    * Passer le défi actuel (échanger avec un autre)
+   * 
+   * FIX CHANGEMENTS ILLIMITÉS PREMIUM :
+   * - Ne bloque plus si changesRemaining <= 0 pour les Premium
+   * - Passe isPremium à swapChallenge
    */
   const skipChallenge = useCallback(
     async (newChallenge: SessionChallenge): Promise<ApiResponse> => {
@@ -373,7 +403,8 @@ export const useSession = ({
         };
       }
 
-      if (changesRemaining <= 0) {
+      // FIX: Ne pas bloquer si Premium (isUnlimitedChanges)
+      if (!isUnlimitedChanges && changesRemaining <= 0) {
         return {
           success: false,
           error: "Vous n'avez plus de changements disponibles",
@@ -382,14 +413,18 @@ export const useSession = ({
 
       console.log(
         "[useSession] Skipping challenge:",
-        currentSession.currentChallengeIndex
+        currentSession.currentChallengeIndex,
+        "isPremium:",
+        isPremium
       );
 
+      // FIX: Passer isPremium à swapChallenge
       const result = await sessionService.swapChallenge(
         sessionCode,
         currentSession.currentChallengeIndex,
         newChallenge,
-        userId || ""
+        userId || "",
+        isPremium // <-- AJOUT: passer isPremium pour les changements illimités
       );
 
       if (!result.success) {
@@ -398,7 +433,7 @@ export const useSession = ({
 
       return result;
     },
-    [sessionCode, currentSession, changesRemaining, userId]
+    [sessionCode, currentSession, changesRemaining, isUnlimitedChanges, isPremium, userId]
   );
 
   /**
@@ -483,6 +518,7 @@ export const useSession = ({
     progress,
     completedCount,
     changesRemaining,
+    isUnlimitedChanges,
     isSessionActive,
     isSessionCompleted,
     isSessionAbandoned,
