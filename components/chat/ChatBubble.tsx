@@ -17,7 +17,7 @@ interface ChatBubbleProps {
   /** C'est mon message ? */
   isOwnMessage: boolean;
   /** Timestamp du message */
-  timestamp: FirebaseFirestoreTypes.Timestamp | Date;
+  timestamp: FirebaseFirestoreTypes.Timestamp | Date | null | undefined;
   /** Message lu par le destinataire ? */
   isRead?: boolean;
   /** Afficher l'heure */
@@ -31,11 +31,22 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   isRead = false,
   showTime = true,
 }) => {
-  // Convertir le timestamp si nécessaire
-  const messageDate = timestamp instanceof Date 
-    ? timestamp 
-    : timestamp.toDate();
+  // Convertir le timestamp si nécessaire (avec gestion du null)
+  const getMessageDate = (): Date => {
+    if (!timestamp) {
+      return new Date(); // Fallback si null
+    }
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+    // Vérifier que toDate existe (Firebase Timestamp)
+    if (typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+    return new Date(); // Fallback
+  };
 
+  const messageDate = getMessageDate();
   const timeString = format(messageDate, 'HH:mm', { locale: fr });
 
   return (
