@@ -7,8 +7,6 @@
  * - Card "Nouvelle partie" avec actions
  * - Section "Comment ça marche"
  * - Banner Premium (si non premium)
- * 
- * PROMPT 7.3 : Ajout bouton de test publicités (Dev only)
  */
 
 import React from "react";
@@ -17,7 +15,6 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
 } from "react-native";
 import { Link, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -224,7 +221,7 @@ function PremiumBanner() {
 }
 
 /**
- * PROMPT 7.3 : Section Dev Tools (mode développement uniquement)
+ * Section Dev Tools (mode développement uniquement)
  */
 function DevToolsSection({ onLogout }: { onLogout: () => void }) {
   return (
@@ -235,17 +232,6 @@ function DevToolsSection({ onLogout }: { onLogout: () => void }) {
           🛠️ Outils Développeur
         </Text>
       </View>
-      
-      {/* Bouton Test Pubs */}
-      <TouchableOpacity
-        onPress={() => router.push("/(main)/test-ads")}
-        className="bg-orange-500 py-3 px-4 rounded-xl flex-row items-center justify-center mb-2"
-      >
-        <Ionicons name="megaphone-outline" size={20} color="#FFF" />
-        <Text className="text-white font-semibold ml-2">
-          🧪 Test Publicités AdMob
-        </Text>
-      </TouchableOpacity>
       
       {/* Bouton Déconnexion */}
       <TouchableOpacity
@@ -311,7 +297,7 @@ export default function HomeScreen() {
         {/* ========== PREMIUM BANNER ========== */}
         {!isPremium && <PremiumBanner />}
 
-        {/* ========== DEV TOOLS (Dev only) - PROMPT 7.3 ========== */}
+        {/* ========== DEV TOOLS (Dev only) ========== */}
         {__DEV__ && <DevToolsSection onLogout={logout} />}
       </ScrollView>
     </SafeAreaView>

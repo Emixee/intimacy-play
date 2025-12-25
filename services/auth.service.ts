@@ -79,7 +79,7 @@ const getAuthErrorMessage = (errorCode: string): string => {
  * - Langue française
  */
 const DEFAULT_USER_PREFERENCES: UserPreferences = {
-  themes: ["romantic", "sensual"],
+  themes: ["classique"],
   toys: [],
   mediaPreferences: {
     photo: true,

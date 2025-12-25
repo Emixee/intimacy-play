@@ -4,7 +4,11 @@
 
 import { create } from "zustand";
 import { Session, IntensityLevel } from "../types";
-import { DEFAULT_CHALLENGE_COUNT, DEFAULT_INTENSITY } from "../utils/constants";
+import { LIMITS } from "../utils/constants";
+
+// Valeurs par défaut depuis LIMITS
+const DEFAULT_CHALLENGE_COUNT = LIMITS.CHALLENGES.DEFAULT;
+const DEFAULT_INTENSITY = LIMITS.INTENSITY.DEFAULT;
 
 // ============================================================
 // INTERFACE DU STORE

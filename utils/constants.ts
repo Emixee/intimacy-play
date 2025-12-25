@@ -632,6 +632,15 @@ export const TIMEOUTS = {
 } as const;
 
 // ============================================================
+// EXPORTS INDIVIDUELS (compatibilité avec imports existants)
+// ============================================================
+
+export const SESSION_CODE_LENGTH = LIMITS.SESSION_CODE_LENGTH;
+export const MIN_AGE = LIMITS.MIN_AGE;
+export const DEFAULT_CHALLENGE_COUNT = LIMITS.CHALLENGES.DEFAULT;
+export const DEFAULT_INTENSITY = LIMITS.INTENSITY.DEFAULT;
+
+// ============================================================
 // EXPORTS PAR DÉFAUT
 // ============================================================
 

@@ -3,11 +3,14 @@
  */
 
 import {
-  SESSION_CODE_LENGTH,
   SESSION_CODE_CHARACTERS,
-  MIN_AGE,
   ERROR_MESSAGES,
+  LIMITS,
 } from "./constants";
+
+// Valeurs extraites de LIMITS
+const SESSION_CODE_LENGTH = LIMITS.SESSION_CODE_LENGTH;
+const MIN_AGE = LIMITS.MIN_AGE;
 
 // ============================================================
 // GÉNÉRATION DE CODE SESSION
