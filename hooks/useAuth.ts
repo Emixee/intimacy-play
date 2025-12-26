@@ -1,11 +1,8 @@
 /**
- * Hook d'authentification
+ * Hook d'authentification - VERSION CORRIGÉE
  *
- * Version simplifiée qui utilise le store Zustand
- * L'initialisation est gérée dans app/_layout.tsx via initializeAuthListeners()
- *
- * Usage:
- * const { user, userData, isAuthenticated, isLoading, login, register, logout } = useAuth();
+ * FIX: isLoading est correctement remis à false après une erreur de login
+ * Cela permet de rééditer le formulaire après une erreur
  */
 
 import { useCallback, useMemo } from "react";
@@ -56,7 +53,7 @@ export const useAuth = (): UseAuthReturn => {
   const setUserData = useAuthStore((state) => state.setUserData);
 
   // ----------------------------------------------------------
-  // COMPUTED VALUES (mémorisées)
+  // COMPUTED VALUES
   // ----------------------------------------------------------
 
   const isAuthenticated = firebaseUser !== null;
@@ -70,20 +67,30 @@ export const useAuth = (): UseAuthReturn => {
   }, [userData?.premium, userData?.premiumUntil]);
 
   // ----------------------------------------------------------
-  // ACTIONS (stables avec useCallback)
+  // ACTIONS
   // ----------------------------------------------------------
 
   /**
-   * Connexion utilisateur
+   * Connexion utilisateur - VERSION CORRIGÉE
+   * FIX: isLoading remis à false si le login échoue
    */
   const login = useCallback(
     async (credentials: LoginCredentials): Promise<ApiResponse<FirebaseAuthTypes.User>> => {
       setLoading(true);
+      
       try {
         const result = await authService.login(credentials);
-        // Le listener onAuthStateChanged dans le store gère le reste
+        
+        // FIX: Si le login échoue, remettre isLoading à false immédiatement
+        // Cela permet à l'utilisateur de réessayer
+        if (!result.success) {
+          setLoading(false);
+        }
+        // Si succès, le listener onAuthStateChanged dans le store gère isLoading
+        
         return result;
       } catch (error: any) {
+        // En cas d'exception, toujours remettre isLoading à false
         setLoading(false);
         return {
           success: false,
@@ -95,14 +102,20 @@ export const useAuth = (): UseAuthReturn => {
   );
 
   /**
-   * Inscription utilisateur
+   * Inscription utilisateur - VERSION CORRIGÉE
    */
   const register = useCallback(
     async (credentials: RegisterCredentials): Promise<ApiResponse<FirebaseAuthTypes.User>> => {
       setLoading(true);
+      
       try {
         const result = await authService.register(credentials);
-        // Le listener onAuthStateChanged dans le store gère le reste
+        
+        // FIX: Si l'inscription échoue, remettre isLoading à false
+        if (!result.success) {
+          setLoading(false);
+        }
+        
         return result;
       } catch (error: any) {
         setLoading(false);
@@ -120,9 +133,15 @@ export const useAuth = (): UseAuthReturn => {
    */
   const logout = useCallback(async (): Promise<ApiResponse> => {
     setLoading(true);
+    
     try {
       const result = await authService.logout();
-      // Le listener onAuthStateChanged dans le store gère le reste
+      
+      // FIX: Si la déconnexion échoue, remettre isLoading à false
+      if (!result.success) {
+        setLoading(false);
+      }
+      
       return result;
     } catch (error: any) {
       setLoading(false);
@@ -185,9 +204,5 @@ export const useAuth = (): UseAuthReturn => {
     refreshUserData,
   };
 };
-
-// ============================================================
-// EXPORT PAR DÉFAUT
-// ============================================================
 
 export default useAuth;

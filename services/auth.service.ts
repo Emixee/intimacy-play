@@ -1,16 +1,8 @@
 /**
- * Service d'authentification Firebase
+ * Service d'authentification Firebase - VERSION CORRIGÉE
  *
- * Gère toutes les opérations d'authentification :
- * - Inscription avec vérification 18+ et création de document Firestore
- * - Connexion avec mise à jour lastLogin
- * - Déconnexion
- * - Réinitialisation de mot de passe
- * - Suppression de compte RGPD complète (user, sessions)
- * - Listener d'état d'authentification
- *
- * ⚠️ IMPORTANT: Le document utilisateur doit inclure le champ 'preferences'
- * car il est requis par les règles de sécurité Firestore.
+ * FIX: La mise à jour de lastLogin ne bloque plus le login
+ * FIX: Meilleurs messages d'erreur avec détails
  */
 
 import { FirebaseAuthTypes } from "@react-native-firebase/auth";
@@ -38,6 +30,7 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   "auth/email-already-in-use": "Cette adresse email est déjà utilisée",
   "auth/invalid-email": "Adresse email invalide",
   "auth/user-not-found": "Aucun compte associé à cette adresse email",
+  "auth/invalid-credential": "Email ou mot de passe incorrect",
 
   // Erreurs de mot de passe
   "auth/wrong-password": "Mot de passe incorrect",
@@ -64,20 +57,13 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
  * Convertit un code d'erreur Firebase en message français
  */
 const getAuthErrorMessage = (errorCode: string): string => {
-  return AUTH_ERROR_MESSAGES[errorCode] || "Une erreur est survenue";
+  return AUTH_ERROR_MESSAGES[errorCode] || `Erreur: ${errorCode || "inconnue"}`;
 };
 
 // ============================================================
 // PRÉFÉRENCES PAR DÉFAUT
 // ============================================================
 
-/**
- * Préférences utilisateur par défaut pour les nouveaux comptes
- * - Thèmes gratuits uniquement (romantic, sensual)
- * - Pas de jouets
- * - Tous les types de médias acceptés
- * - Langue française
- */
 const DEFAULT_USER_PREFERENCES: UserPreferences = {
   themes: ["classique"],
   toys: [],
@@ -93,18 +79,12 @@ const DEFAULT_USER_PREFERENCES: UserPreferences = {
 // FONCTIONS UTILITAIRES
 // ============================================================
 
-/**
- * Calcule l'âge à partir d'une date de naissance
- * @param dateOfBirth - Date de naissance
- * @returns Âge en années
- */
 const calculateAge = (dateOfBirth: Date): number => {
   const today = new Date();
   const birthDate = new Date(dateOfBirth);
   let age = today.getFullYear() - birthDate.getFullYear();
   const monthDiff = today.getMonth() - birthDate.getMonth();
   
-  // Ajuster si l'anniversaire n'est pas encore passé cette année
   if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
     age--;
   }
@@ -112,11 +92,6 @@ const calculateAge = (dateOfBirth: Date): number => {
   return age;
 };
 
-/**
- * Vérifie si l'utilisateur a au moins 18 ans
- * @param dateOfBirth - Date de naissance
- * @returns true si 18+, false sinon
- */
 const isAdult = (dateOfBirth: Date): boolean => {
   return calculateAge(dateOfBirth) >= 18;
 };
@@ -130,16 +105,6 @@ export const authService = {
   // INSCRIPTION
   // ----------------------------------------------------------
 
-  /**
-   * Inscrit un nouvel utilisateur
-   * 1. Vérifie que l'utilisateur a au moins 18 ans
-   * 2. Crée le compte Firebase Auth
-   * 3. Envoie l'email de vérification
-   * 4. Crée le document utilisateur dans Firestore (avec preferences)
-   *
-   * @param credentials - Email, password, displayName, gender, dateOfBirth
-   * @returns ApiResponse avec l'utilisateur Firebase
-   */
   async register(
     credentials: RegisterCredentials
   ): Promise<ApiResponse<FirebaseAuthTypes.User>> {
@@ -170,22 +135,17 @@ export const authService = {
       await firebaseUser.updateProfile({ displayName });
 
       // 5. Créer le document utilisateur dans Firestore
-      // ⚠️ IMPORTANT: Le champ 'preferences' est REQUIS par les règles Firestore
       const userData: Omit<User, "id"> = {
         email,
         displayName,
         gender,
         dateOfBirth: toTimestamp(dateOfBirth),
-        // Premium (false par défaut)
         premium: false,
         premiumUntil: null,
         premiumPlan: null,
-        // Préférences (REQUIS par les règles Firestore)
         preferences: DEFAULT_USER_PREFERENCES,
-        // Timestamps
         createdAt: serverTimestamp() as any,
         lastLogin: serverTimestamp() as any,
-        // Notifications
         notificationsEnabled: true,
         fcmToken: null,
       };
@@ -209,42 +169,46 @@ export const authService = {
   },
 
   // ----------------------------------------------------------
-  // CONNEXION
+  // CONNEXION - VERSION CORRIGÉE
   // ----------------------------------------------------------
 
-  /**
-   * Connecte un utilisateur existant
-   * Met à jour le champ lastLogin dans Firestore
-   *
-   * @param credentials - Email et password
-   * @returns ApiResponse avec l'utilisateur Firebase
-   */
   async login(
     credentials: LoginCredentials
   ): Promise<ApiResponse<FirebaseAuthTypes.User>> {
     const { email, password } = credentials;
 
     try {
+      console.log("[AuthService] Attempting login for:", email);
+      
       // 1. Connexion Firebase Auth
       const userCredential = await auth().signInWithEmailAndPassword(
         email,
         password
       );
       const firebaseUser = userCredential.user;
+      
+      console.log("[AuthService] Firebase Auth successful:", firebaseUser.uid);
 
       // 2. Mettre à jour lastLogin dans Firestore
-      await usersCollection().doc(firebaseUser.uid).update({
-        lastLogin: serverTimestamp(),
-      });
+      // FIX: Ne PAS bloquer le login si cette mise à jour échoue
+      try {
+        await usersCollection().doc(firebaseUser.uid).update({
+          lastLogin: serverTimestamp(),
+        });
+        console.log("[AuthService] lastLogin updated");
+      } catch (updateError: any) {
+        // Log l'erreur mais continue quand même
+        console.warn("[AuthService] Failed to update lastLogin (non-blocking):", updateError.code || updateError.message);
+      }
 
-      console.log("[AuthService] User logged in:", firebaseUser.uid);
+      console.log("[AuthService] Login successful for:", firebaseUser.uid);
 
       return {
         success: true,
         data: firebaseUser,
       };
     } catch (error: any) {
-      console.error("[AuthService] Login error:", error);
+      console.error("[AuthService] Login error:", error.code, error.message);
       return {
         success: false,
         error: getAuthErrorMessage(error.code),
@@ -257,11 +221,6 @@ export const authService = {
   // DÉCONNEXION
   // ----------------------------------------------------------
 
-  /**
-   * Déconnecte l'utilisateur courant
-   *
-   * @returns ApiResponse void
-   */
   async logout(): Promise<ApiResponse> {
     try {
       await auth().signOut();
@@ -280,12 +239,6 @@ export const authService = {
   // RÉINITIALISATION DE MOT DE PASSE
   // ----------------------------------------------------------
 
-  /**
-   * Envoie un email de réinitialisation de mot de passe
-   *
-   * @param email - Adresse email de l'utilisateur
-   * @returns ApiResponse void
-   */
   async resetPassword(email: string): Promise<ApiResponse> {
     try {
       await auth().sendPasswordResetEmail(email);
@@ -305,11 +258,6 @@ export const authService = {
   // RENVOI EMAIL DE VÉRIFICATION
   // ----------------------------------------------------------
 
-  /**
-   * Renvoie l'email de vérification à l'utilisateur connecté
-   *
-   * @returns ApiResponse void
-   */
   async resendVerificationEmail(): Promise<ApiResponse> {
     try {
       const currentUser = auth().currentUser;
@@ -337,18 +285,11 @@ export const authService = {
   // RÉCUPÉRATION DES DONNÉES UTILISATEUR
   // ----------------------------------------------------------
 
-  /**
-   * Récupère les données utilisateur depuis Firestore
-   *
-   * @param uid - UID de l'utilisateur
-   * @returns ApiResponse avec les données utilisateur
-   */
   async getUserData(uid: string): Promise<ApiResponse<User>> {
     try {
       const doc = await usersCollection().doc(uid).get();
 
-      // FIX: exists() est maintenant une méthode
-      if (!doc.exists()) {
+      if (!doc.exists) {
         return {
           success: false,
           error: "Profil utilisateur introuvable",
@@ -377,25 +318,12 @@ export const authService = {
   // LISTENERS
   // ----------------------------------------------------------
 
-  /**
-   * Écoute les changements d'état d'authentification
-   *
-   * @param callback - Fonction appelée à chaque changement
-   * @returns Fonction de désinscription
-   */
   onAuthStateChanged(
     callback: (user: FirebaseAuthTypes.User | null) => void
   ): () => void {
     return auth().onAuthStateChanged(callback);
   },
 
-  /**
-   * Écoute les changements des données utilisateur dans Firestore
-   *
-   * @param uid - UID de l'utilisateur
-   * @param callback - Fonction appelée à chaque changement
-   * @returns Fonction de désinscription
-   */
   onUserDataChanged(
     uid: string,
     callback: (user: User | null) => void
@@ -404,8 +332,7 @@ export const authService = {
       .doc(uid)
       .onSnapshot(
         (doc) => {
-          // FIX: exists() est maintenant une méthode
-          if (doc.exists()) {
+          if (doc.exists) {
             const userData: User = {
               id: doc.id,
               ...doc.data(),
@@ -426,38 +353,18 @@ export const authService = {
   // UTILITAIRES
   // ----------------------------------------------------------
 
-  /**
-   * Récupère l'utilisateur Firebase actuellement connecté
-   *
-   * @returns Utilisateur Firebase ou null
-   */
   getCurrentUser(): FirebaseAuthTypes.User | null {
     return auth().currentUser;
   },
 
-  /**
-   * Vérifie si un utilisateur est connecté
-   *
-   * @returns true si connecté, false sinon
-   */
   isAuthenticated(): boolean {
     return auth().currentUser !== null;
   },
 
   // ----------------------------------------------------------
-  // SUPPRESSION DE COMPTE (RGPD COMPLÈTE)
+  // SUPPRESSION DE COMPTE (RGPD)
   // ----------------------------------------------------------
 
-  /**
-   * Supprime TOUTES les données de l'utilisateur (conformité RGPD)
-   * 
-   * Ordre de suppression :
-   * 1. Sessions où l'utilisateur est créateur ou partenaire
-   * 2. Document utilisateur Firestore
-   * 3. Compte Firebase Auth
-   *
-   * @returns ApiResponse void
-   */
   async deleteAccount(): Promise<ApiResponse> {
     try {
       const currentUser = auth().currentUser;
@@ -477,7 +384,6 @@ export const authService = {
         .get();
 
       for (const sessionDoc of creatorSessionsSnapshot.docs) {
-        // Supprimer les sous-collections (messages) si elles existent
         const messagesSnapshot = await sessionDoc.ref.collection("messages").get();
         for (const messageDoc of messagesSnapshot.docs) {
           await messageDoc.ref.delete();
@@ -492,7 +398,6 @@ export const authService = {
         .get();
 
       for (const sessionDoc of partnerSessionsSnapshot.docs) {
-        // Supprimer les sous-collections (messages) si elles existent
         const messagesSnapshot = await sessionDoc.ref.collection("messages").get();
         for (const messageDoc of messagesSnapshot.docs) {
           await messageDoc.ref.delete();
@@ -505,7 +410,7 @@ export const authService = {
       await usersCollection().doc(uid).delete();
       console.log("[AuthService] Deleted user document:", uid);
 
-      // 4. Supprimer le compte Firebase Auth (en dernier)
+      // 4. Supprimer le compte Firebase Auth
       await currentUser.delete();
       console.log("[AuthService] Deleted Firebase Auth account:", uid);
 
@@ -523,15 +428,9 @@ export const authService = {
   },
 
   // ----------------------------------------------------------
-  // MISE À JOUR DE MOT DE PASSE
+  // MISE À JOUR MOT DE PASSE
   // ----------------------------------------------------------
 
-  /**
-   * Met à jour le mot de passe de l'utilisateur connecté
-   *
-   * @param newPassword - Nouveau mot de passe
-   * @returns ApiResponse void
-   */
   async updatePassword(newPassword: string): Promise<ApiResponse> {
     try {
       const currentUser = auth().currentUser;
@@ -557,16 +456,9 @@ export const authService = {
   },
 
   // ----------------------------------------------------------
-  // MISE À JOUR DE L'EMAIL
+  // MISE À JOUR EMAIL
   // ----------------------------------------------------------
 
-  /**
-   * Met à jour l'email de l'utilisateur connecté
-   * Met également à jour le document Firestore
-   *
-   * @param newEmail - Nouvel email
-   * @returns ApiResponse void
-   */
   async updateEmail(newEmail: string): Promise<ApiResponse> {
     try {
       const currentUser = auth().currentUser;
@@ -577,14 +469,8 @@ export const authService = {
         };
       }
 
-      // 1. Mettre à jour dans Firebase Auth
       await currentUser.updateEmail(newEmail);
-
-      // 2. Envoyer un email de vérification
       await currentUser.sendEmailVerification();
-
-      // Note: Le champ email dans Firestore ne peut pas être modifié
-      // selon les règles de sécurité (immutable)
 
       console.log("[AuthService] Email updated to:", newEmail);
 
@@ -603,31 +489,13 @@ export const authService = {
   // UTILITAIRES PUBLICS
   // ----------------------------------------------------------
 
-  /**
-   * Vérifie si une date de naissance correspond à un utilisateur majeur (18+)
-   * Utile pour la validation côté UI avant inscription
-   * 
-   * @param dateOfBirth - Date de naissance
-   * @returns true si 18+, false sinon
-   */
   isAdult(dateOfBirth: Date): boolean {
     return isAdult(dateOfBirth);
   },
 
-  /**
-   * Calcule l'âge à partir d'une date de naissance
-   * Utile pour affichage côté UI
-   * 
-   * @param dateOfBirth - Date de naissance
-   * @returns Âge en années
-   */
   calculateAge(dateOfBirth: Date): number {
     return calculateAge(dateOfBirth);
   },
 };
-
-// ============================================================
-// EXPORT PAR DÉFAUT
-// ============================================================
 
 export default authService;
