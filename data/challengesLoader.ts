@@ -1,35 +1,65 @@
 /**
- * Lazy Loading des défis - VERSION OPTIMISÉE
+ * Lazy Loading des défis - VERSION CORRIGÉE
  * 
- * Au lieu de charger 67KB de défis au démarrage,
- * on charge uniquement les niveaux nécessaires à la demande.
+ * Compatible avec le wrapper challengesData.ts existant
+ * qui enrichit les défis avec : id, hasToy, toyName
  * 
  * Avantages :
  * - Réduction du temps de démarrage
  * - Moins de mémoire utilisée
- * - Bundle initial plus léger
+ * - Conserve toutes les fonctions du wrapper
  */
 
-import { ChallengeType } from "../types";
+import type {
+  Gender,
+  IntensityLevel,
+  ChallengeType,
+} from "../types";
 
 // ============================================================
-// TYPE LOCAL
+// TYPES (identiques à challengesData.ts)
 // ============================================================
 
-export interface ChallengeData {
+/**
+ * Template de défi étendu avec support jouets
+ */
+export interface ExtendedChallengeTemplate {
+  id: string;
   text: string;
+  level: IntensityLevel;
+  gender: Gender;
   type: ChallengeType;
   theme: string;
+  hasToy: boolean;
+  toyName: string | null;
 }
-
-export type Gender = "homme" | "femme";
-export type IntensityLevel = 1 | 2 | 3 | 4;
 
 // ============================================================
 // CACHE DES DÉFIS CHARGÉS
 // ============================================================
 
-const challengesCache: Map<string, ChallengeData[]> = new Map();
+let challengesModule: typeof import("./challengesData") | null = null;
+let isLoaded = false;
+
+// ============================================================
+// CHARGEMENT LAZY DU MODULE
+// ============================================================
+
+/**
+ * Charge le module challengesData de manière lazy
+ * Une seule fois, puis mis en cache
+ */
+async function ensureLoaded(): Promise<typeof import("./challengesData")> {
+  if (challengesModule && isLoaded) {
+    return challengesModule;
+  }
+
+  // Import dynamique du wrapper complet
+  challengesModule = await import("./challengesData");
+  isLoaded = true;
+  
+  return challengesModule;
+}
 
 // ============================================================
 // FONCTIONS DE CHARGEMENT LAZY
@@ -37,137 +67,151 @@ const challengesCache: Map<string, ChallengeData[]> = new Map();
 
 /**
  * Charge les défis pour un niveau et genre spécifiques
- * Utilise un cache pour éviter les rechargements
+ * Retourne des ExtendedChallengeTemplate (avec id, hasToy, etc.)
  */
 export async function loadChallenges(
   level: IntensityLevel,
   gender: Gender
-): Promise<ChallengeData[]> {
-  const cacheKey = `${level}_${gender.toUpperCase()}`;
-  
-  // Retourner du cache si disponible
-  if (challengesCache.has(cacheKey)) {
-    return challengesCache.get(cacheKey)!;
-  }
-
-  // Charger dynamiquement le module approprié
-  let challenges: ChallengeData[];
-  
-  try {
-    const module = await import("./challenges");
-    
-    switch (cacheKey) {
-      case "1_HOMME":
-        challenges = module.CHALLENGES_N1_HOMME;
-        break;
-      case "1_FEMME":
-        challenges = module.CHALLENGES_N1_FEMME;
-        break;
-      case "2_HOMME":
-        challenges = module.CHALLENGES_N2_HOMME;
-        break;
-      case "2_FEMME":
-        challenges = module.CHALLENGES_N2_FEMME;
-        break;
-      case "3_HOMME":
-        challenges = module.CHALLENGES_N3_HOMME;
-        break;
-      case "3_FEMME":
-        challenges = module.CHALLENGES_N3_FEMME;
-        break;
-      case "4_HOMME":
-        challenges = module.CHALLENGES_N4_HOMME;
-        break;
-      case "4_FEMME":
-        challenges = module.CHALLENGES_N4_FEMME;
-        break;
-      default:
-        challenges = [];
-    }
-    
-    // Mettre en cache
-    challengesCache.set(cacheKey, challenges);
-    
-    return challenges;
-  } catch (error) {
-    console.error(`[ChallengesLoader] Erreur chargement ${cacheKey}:`, error);
-    return [];
-  }
+): Promise<ExtendedChallengeTemplate[]> {
+  const module = await ensureLoaded();
+  return module.CHALLENGES_MAP[level][gender];
 }
 
 /**
- * Précharge les défis pour plusieurs niveaux
- * Utile avant de créer une session
+ * Précharge tous les défis en mémoire
  */
-export async function preloadChallenges(
-  levels: IntensityLevel[],
-  genders: Gender[]
-): Promise<void> {
-  const promises: Promise<ChallengeData[]>[] = [];
-  
-  for (const level of levels) {
-    for (const gender of genders) {
-      promises.push(loadChallenges(level, gender));
-    }
-  }
-  
-  await Promise.all(promises);
+export async function preloadAllChallenges(): Promise<void> {
+  await ensureLoaded();
 }
 
 /**
- * Charge tous les défis d'un coup (fallback)
- * À utiliser seulement si nécessaire
+ * Récupère tous les défis (lazy)
  */
-export async function loadAllChallenges(): Promise<Record<string, ChallengeData[]>> {
-  const levels: IntensityLevel[] = [1, 2, 3, 4];
-  const genders: Gender[] = ["homme", "femme"];
-  
-  await preloadChallenges(levels, genders);
-  
-  const result: Record<string, ChallengeData[]> = {};
-  
-  for (const level of levels) {
-    for (const gender of genders) {
-      const key = `${level}_${gender.toUpperCase()}`;
-      result[key] = challengesCache.get(key) || [];
-    }
-  }
-  
-  return result;
+export async function getAllChallengesLazy(): Promise<ExtendedChallengeTemplate[]> {
+  const module = await ensureLoaded();
+  return module.getAllChallenges();
 }
 
 /**
- * Vide le cache (utile pour libérer la mémoire)
+ * Récupère les défis par niveau (lazy)
  */
-export function clearChallengesCache(): void {
-  challengesCache.clear();
+export async function getChallengesByLevelLazy(
+  level: IntensityLevel
+): Promise<ExtendedChallengeTemplate[]> {
+  const module = await ensureLoaded();
+  return module.getChallengesByLevel(level);
 }
 
 /**
- * Retourne la taille du cache
+ * Récupère les défis par genre (lazy)
  */
-export function getCacheSize(): number {
-  let size = 0;
-  challengesCache.forEach((challenges) => {
-    size += challenges.length;
-  });
-  return size;
+export async function getChallengesByGenderLazy(
+  gender: Gender
+): Promise<ExtendedChallengeTemplate[]> {
+  const module = await ensureLoaded();
+  return module.getChallengesByGender(gender);
+}
+
+/**
+ * Récupère les défis par thème (lazy)
+ */
+export async function getChallengesByThemeLazy(
+  theme: string
+): Promise<ExtendedChallengeTemplate[]> {
+  const module = await ensureLoaded();
+  return module.getChallengesByTheme(theme);
+}
+
+/**
+ * Récupère les défis avec un jouet spécifique (lazy)
+ */
+export async function getChallengesWithToyLazy(
+  toyName: string
+): Promise<ExtendedChallengeTemplate[]> {
+  const module = await ensureLoaded();
+  return module.getChallengesWithToy(toyName);
+}
+
+/**
+ * Récupère les défis sans jouet (lazy)
+ */
+export async function getChallengesWithoutToyLazy(): Promise<ExtendedChallengeTemplate[]> {
+  const module = await ensureLoaded();
+  return module.getChallengesWithoutToy();
+}
+
+/**
+ * Récupère les statistiques (lazy)
+ */
+export async function getChallengeStatsLazy() {
+  const module = await ensureLoaded();
+  return module.getChallengeStats();
+}
+
+/**
+ * Récupère tous les thèmes (lazy)
+ */
+export async function getAllThemesLazy(): Promise<string[]> {
+  const module = await ensureLoaded();
+  return module.getAllThemes();
+}
+
+/**
+ * Récupère tous les jouets (lazy)
+ */
+export async function getAllToysLazy(): Promise<string[]> {
+  const module = await ensureLoaded();
+  return module.getAllToys();
 }
 
 // ============================================================
-// MAP SYNCHRONE (pour compatibilité avec code existant)
+// ACCÈS SYNCHRONE (après préchargement)
 // ============================================================
 
 /**
- * Retourne la map des défis déjà chargés
- * ATTENTION: Ne contient que les défis déjà en cache
+ * Vérifie si les défis sont chargés
  */
-export function getChallengesMap(): Record<string, ChallengeData[]> {
-  const result: Record<string, ChallengeData[]> = {};
-  
-  challengesCache.forEach((challenges, key) => {
-    result[key] = challenges;
-  });
-  
-  return result;
+export function isChallengesLoaded(): boolean {
+  return isLoaded;
 }
+
+/**
+ * Accès synchrone au module (ATTENTION: retourne null si pas chargé)
+ * À utiliser uniquement après preloadAllChallenges()
+ */
+export function getChallengesModuleSync() {
+  if (!isLoaded || !challengesModule) {
+    console.warn("[ChallengesLoader] Module not loaded! Call preloadAllChallenges() first.");
+    return null;
+  }
+  return challengesModule;
+}
+
+/**
+ * Accès synchrone à la MAP (ATTENTION: retourne null si pas chargé)
+ */
+export function getChallengesMapSync() {
+  const module = getChallengesModuleSync();
+  return module?.CHALLENGES_MAP || null;
+}
+
+// ============================================================
+// EXPORT PAR DÉFAUT
+// ============================================================
+
+export default {
+  loadChallenges,
+  preloadAllChallenges,
+  getAllChallengesLazy,
+  getChallengesByLevelLazy,
+  getChallengesByGenderLazy,
+  getChallengesByThemeLazy,
+  getChallengesWithToyLazy,
+  getChallengesWithoutToyLazy,
+  getChallengeStatsLazy,
+  getAllThemesLazy,
+  getAllToysLazy,
+  isChallengesLoaded,
+  getChallengesModuleSync,
+  getChallengesMapSync,
+};

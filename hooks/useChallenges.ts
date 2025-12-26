@@ -1,80 +1,78 @@
 /**
  * Hook pour charger les défis avec lazy loading
  * 
- * Optimisations :
- * - Charge les défis à la demande
- * - Cache automatique
- * - Gestion d'erreurs
- * - État de chargement
+ * Compatible avec le wrapper challengesData.ts
+ * Retourne des ExtendedChallengeTemplate (avec id, hasToy, toyName)
  */
 
 import { useState, useCallback, useEffect } from "react";
 import { 
   loadChallenges, 
-  preloadChallenges, 
-  ChallengeData,
-  Gender,
-  IntensityLevel,
+  preloadAllChallenges,
+  getAllChallengesLazy,
+  getChallengesByThemeLazy,
+  getChallengesWithToyLazy,
+  getChallengesWithoutToyLazy,
+  getAllThemesLazy,
+  getAllToysLazy,
+  isChallengesLoaded,
+  ExtendedChallengeTemplate,
 } from "../data/challengesLoader";
+
+import type { Gender, IntensityLevel } from "../types";
+
+// ============================================================
+// HOOK PRINCIPAL
+// ============================================================
 
 interface UseChallengesOptions {
   /** Précharger automatiquement au montage */
   preload?: boolean;
-  /** Niveaux à précharger */
-  preloadLevels?: IntensityLevel[];
-  /** Genres à précharger */
-  preloadGenders?: Gender[];
 }
 
 interface UseChallengesReturn {
-  /** Charger des défis spécifiques */
-  loadChallengesForLevel: (level: IntensityLevel, gender: Gender) => Promise<ChallengeData[]>;
-  /** Précharger plusieurs niveaux */
-  preloadMultiple: (levels: IntensityLevel[], genders: Gender[]) => Promise<void>;
+  /** Charger des défis pour un niveau/genre */
+  loadChallengesForLevel: (level: IntensityLevel, gender: Gender) => Promise<ExtendedChallengeTemplate[]>;
+  /** Précharger tous les défis */
+  preloadAll: () => Promise<void>;
+  /** Récupérer tous les défis */
+  getAllChallenges: () => Promise<ExtendedChallengeTemplate[]>;
+  /** Récupérer les défis par thème */
+  getChallengesByTheme: (theme: string) => Promise<ExtendedChallengeTemplate[]>;
+  /** Récupérer les défis avec un jouet */
+  getChallengesWithToy: (toyName: string) => Promise<ExtendedChallengeTemplate[]>;
+  /** Récupérer les défis sans jouet */
+  getChallengesWithoutToy: () => Promise<ExtendedChallengeTemplate[]>;
+  /** Récupérer tous les thèmes */
+  getAllThemes: () => Promise<string[]>;
+  /** Récupérer tous les jouets */
+  getAllToys: () => Promise<string[]>;
   /** État de chargement */
   isLoading: boolean;
+  /** Les défis sont-ils chargés ? */
+  isLoaded: boolean;
   /** Erreur éventuelle */
   error: string | null;
-  /** Défis chargés (cache local) */
-  challenges: Map<string, ChallengeData[]>;
 }
 
 export function useChallenges(options: UseChallengesOptions = {}): UseChallengesReturn {
-  const {
-    preload = false,
-    preloadLevels = [1, 2],
-    preloadGenders = ["homme", "femme"],
-  } = options;
+  const { preload = false } = options;
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [challenges, setChallenges] = useState<Map<string, ChallengeData[]>>(new Map());
+  const [isLoaded, setIsLoaded] = useState(isChallengesLoaded());
 
-  // Charger des défis pour un niveau/genre
+  // Charger les défis pour un niveau/genre
   const loadChallengesForLevel = useCallback(async (
     level: IntensityLevel,
     gender: Gender
-  ): Promise<ChallengeData[]> => {
-    const cacheKey = `${level}_${gender.toUpperCase()}`;
-    
-    // Vérifier le cache local
-    if (challenges.has(cacheKey)) {
-      return challenges.get(cacheKey)!;
-    }
-
+  ): Promise<ExtendedChallengeTemplate[]> => {
     setIsLoading(true);
     setError(null);
 
     try {
       const data = await loadChallenges(level, gender);
-      
-      // Mettre à jour le cache local
-      setChallenges(prev => {
-        const newMap = new Map(prev);
-        newMap.set(cacheKey, data);
-        return newMap;
-      });
-
+      setIsLoaded(true);
       return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erreur de chargement";
@@ -83,58 +81,120 @@ export function useChallenges(options: UseChallengesOptions = {}): UseChallenges
     } finally {
       setIsLoading(false);
     }
-  }, [challenges]);
+  }, []);
 
-  // Précharger plusieurs niveaux
-  const preloadMultiple = useCallback(async (
-    levels: IntensityLevel[],
-    genders: Gender[]
-  ): Promise<void> => {
+  // Précharger tous les défis
+  const preloadAll = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      await preloadChallenges(levels, genders);
-
-      // Mettre à jour le cache local
-      const newMap = new Map(challenges);
-      for (const level of levels) {
-        for (const gender of genders) {
-          const cacheKey = `${level}_${gender.toUpperCase()}`;
-          const data = await loadChallenges(level, gender);
-          newMap.set(cacheKey, data);
-        }
-      }
-      setChallenges(newMap);
+      await preloadAllChallenges();
+      setIsLoaded(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erreur de préchargement";
       setError(message);
     } finally {
       setIsLoading(false);
     }
-  }, [challenges]);
+  }, []);
+
+  // Wrapper pour getAllChallenges
+  const getAllChallenges = useCallback(async (): Promise<ExtendedChallengeTemplate[]> => {
+    setIsLoading(true);
+    try {
+      const data = await getAllChallengesLazy();
+      setIsLoaded(true);
+      return data;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Wrapper pour getChallengesByTheme
+  const getChallengesByTheme = useCallback(async (theme: string): Promise<ExtendedChallengeTemplate[]> => {
+    try {
+      return await getChallengesByThemeLazy(theme);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+      return [];
+    }
+  }, []);
+
+  // Wrapper pour getChallengesWithToy
+  const getChallengesWithToy = useCallback(async (toyName: string): Promise<ExtendedChallengeTemplate[]> => {
+    try {
+      return await getChallengesWithToyLazy(toyName);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+      return [];
+    }
+  }, []);
+
+  // Wrapper pour getChallengesWithoutToy
+  const getChallengesWithoutToy = useCallback(async (): Promise<ExtendedChallengeTemplate[]> => {
+    try {
+      return await getChallengesWithoutToyLazy();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+      return [];
+    }
+  }, []);
+
+  // Wrapper pour getAllThemes
+  const getAllThemes = useCallback(async (): Promise<string[]> => {
+    try {
+      return await getAllThemesLazy();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+      return [];
+    }
+  }, []);
+
+  // Wrapper pour getAllToys
+  const getAllToys = useCallback(async (): Promise<string[]> => {
+    try {
+      return await getAllToysLazy();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+      return [];
+    }
+  }, []);
 
   // Préchargement automatique au montage
   useEffect(() => {
-    if (preload) {
-      preloadMultiple(preloadLevels, preloadGenders);
+    if (preload && !isLoaded) {
+      preloadAll();
     }
-  }, [preload]); // Volontairement limité pour éviter les boucles
+  }, [preload, isLoaded, preloadAll]);
 
   return {
     loadChallengesForLevel,
-    preloadMultiple,
+    preloadAll,
+    getAllChallenges,
+    getChallengesByTheme,
+    getChallengesWithToy,
+    getChallengesWithoutToy,
+    getAllThemes,
+    getAllToys,
     isLoading,
+    isLoaded,
     error,
-    challenges,
   };
 }
 
+// ============================================================
+// HOOK SIMPLIFIÉ POUR UN NIVEAU/GENRE
+// ============================================================
+
 /**
- * Hook simplifié pour obtenir les défis d'un niveau
+ * Hook simplifié pour obtenir les défis d'un niveau/genre spécifique
  */
 export function useLevelChallenges(level: IntensityLevel, gender: Gender) {
-  const [challenges, setChallenges] = useState<ChallengeData[]>([]);
+  const [challenges, setChallenges] = useState<ExtendedChallengeTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -168,4 +228,92 @@ export function useLevelChallenges(level: IntensityLevel, gender: Gender) {
   }, [level, gender]);
 
   return { challenges, isLoading, error };
+}
+
+// ============================================================
+// HOOK POUR LES THÈMES
+// ============================================================
+
+/**
+ * Hook pour obtenir tous les thèmes disponibles
+ */
+export function useThemes() {
+  const [themes, setThemes] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const data = await getAllThemesLazy();
+        if (mounted) {
+          setThemes(data);
+          setError(null);
+        }
+      } catch (err) {
+        if (mounted) {
+          setError(err instanceof Error ? err.message : "Erreur");
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    load();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return { themes, isLoading, error };
+}
+
+// ============================================================
+// HOOK POUR LES JOUETS
+// ============================================================
+
+/**
+ * Hook pour obtenir tous les jouets disponibles
+ */
+export function useToys() {
+  const [toys, setToys] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const data = await getAllToysLazy();
+        if (mounted) {
+          setToys(data);
+          setError(null);
+        }
+      } catch (err) {
+        if (mounted) {
+          setError(err instanceof Error ? err.message : "Erreur");
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    load();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return { toys, isLoading, error };
 }

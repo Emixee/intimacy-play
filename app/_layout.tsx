@@ -1,11 +1,8 @@
 /**
- * Layout racine de l'application - OPTIMISÉ PRODUCTION
+ * Layout racine de l'application - VERSION CORRIGÉE
  *
- * Gère :
- * - L'initialisation de l'authentification (UNE SEULE FOIS)
- * - L'affichage du loading initial
- * - La configuration globale de la navigation
- * - Le mode immersif Android (barre de navigation masquée)
+ * FIX: Ne bloque plus sur isLoading, uniquement sur isInitialized
+ * Cela évite le chargement infini après login
  */
 
 import React, { useEffect } from "react";
@@ -28,32 +25,24 @@ try {
 
 /**
  * Configure le mode immersif Android
- * Masque la barre de navigation pour une expérience plein écran
  */
 const setupImmersiveMode = async (): Promise<void> => {
   if (Platform.OS !== "android") return;
 
   try {
-    // Masquer la barre de navigation
     await NavigationBar.setVisibilityAsync("hidden");
-    
-    // Configurer le comportement : réapparaît avec un swipe depuis le bas
     await NavigationBar.setBehaviorAsync("overlay-swipe");
-    
-    // Rendre la barre transparente quand elle apparaît
     await NavigationBar.setBackgroundColorAsync("#00000000");
-    
-    // Position absolue pour overlay
     await NavigationBar.setPositionAsync("absolute");
   } catch (error) {
-    // Ignorer silencieusement les erreurs de navigation bar
+    // Ignorer silencieusement
   }
 };
 
 export default function RootLayout() {
-  // Sélectionner uniquement les valeurs nécessaires (pas de fonctions)
+  // Sélectionner uniquement isInitialized
+  // FIX: On ne bloque plus sur isLoading pour éviter le chargement infini
   const isInitialized = useAuthStore((state) => state.isInitialized);
-  const isLoading = useAuthStore((state) => state.isLoading);
 
   // Initialiser les listeners Firebase UNE SEULE FOIS
   useEffect(() => {
@@ -81,8 +70,10 @@ export default function RootLayout() {
     hideSplash();
   }, [isInitialized]);
 
-  // Afficher le loading pendant l'initialisation
-  if (!isInitialized || isLoading) {
+  // FIX: Afficher le loading UNIQUEMENT pendant l'initialisation
+  // Avant: if (!isInitialized || isLoading) - causait le blocage
+  // Après: if (!isInitialized) - ne bloque que le temps nécessaire
+  if (!isInitialized) {
     return (
       <SafeAreaProvider>
         <View className="flex-1 bg-pink-50">

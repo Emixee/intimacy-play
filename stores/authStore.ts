@@ -2,9 +2,9 @@
  * Store Zustand pour l'authentification
  * 
  * Version corrigée avec :
- * - Initialisation singleton du listener Firebase
- * - Fonctions stables (pas de re-création)
- * - Gestion propre des subscriptions
+ * - Timeout pour éviter le blocage infini
+ * - Meilleure gestion des erreurs Firestore
+ * - isLoading réinitialisé correctement
  */
 
 import { create } from "zustand";
@@ -12,6 +12,13 @@ import { FirebaseAuthTypes } from "@react-native-firebase/auth";
 import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 import { User } from "../types";
+
+// ============================================================
+// CONSTANTES
+// ============================================================
+
+/** Timeout pour le chargement des données utilisateur (ms) */
+const USER_DATA_TIMEOUT = 10000; // 10 secondes
 
 // ============================================================
 // INTERFACE DU STORE
@@ -56,19 +63,21 @@ export const useAuthStore = create<AuthState>()((set) => ({
 }));
 
 // ============================================================
-// SINGLETON INITIALIZATION (appelé une seule fois)
+// SINGLETON INITIALIZATION
 // ============================================================
 
 interface ListenerState {
   isInitialized: boolean;
   authUnsubscribe: (() => void) | null;
   userDataUnsubscribe: (() => void) | null;
+  timeoutId: NodeJS.Timeout | null;
 }
 
 const listenerState: ListenerState = {
   isInitialized: false,
   authUnsubscribe: null,
   userDataUnsubscribe: null,
+  timeoutId: null,
 };
 
 /**
@@ -85,21 +94,37 @@ export const initializeAuthListeners = (): (() => void) => {
   listenerState.isInitialized = true;
   console.log("[AuthStore] Initializing auth listener");
   
-  const { setFirebaseUser, setUserData, setLoading, setInitialized } = useAuthStore.getState();
-  
   // Listener principal d'authentification
   listenerState.authUnsubscribe = auth().onAuthStateChanged(async (user) => {
     console.log("[AuthStore] Auth state changed:", user?.uid ?? "null");
     
-    // Cleanup previous user data listener
+    // Cleanup previous listeners & timeout
     if (listenerState.userDataUnsubscribe) {
       listenerState.userDataUnsubscribe();
       listenerState.userDataUnsubscribe = null;
     }
+    if (listenerState.timeoutId) {
+      clearTimeout(listenerState.timeoutId);
+      listenerState.timeoutId = null;
+    }
     
     if (user) {
-      // Utilisateur connecté
+      // =====================================================
+      // UTILISATEUR CONNECTÉ
+      // =====================================================
+      console.log("[AuthStore] User logged in, loading user data...");
+      
+      // Mettre à jour firebaseUser immédiatement
       useAuthStore.setState({ firebaseUser: user });
+      
+      // TIMEOUT: Ne pas rester bloqué indéfiniment
+      listenerState.timeoutId = setTimeout(() => {
+        console.warn("[AuthStore] Timeout loading user data!");
+        useAuthStore.setState({ 
+          isLoading: false, 
+          isInitialized: true 
+        });
+      }, USER_DATA_TIMEOUT);
       
       // Écouter les changements des données utilisateur
       listenerState.userDataUnsubscribe = firestore()
@@ -107,16 +132,24 @@ export const initializeAuthListeners = (): (() => void) => {
         .doc(user.uid)
         .onSnapshot(
           (snapshot) => {
-            if (snapshot.exists()) {
+            // Clear timeout car on a reçu une réponse
+            if (listenerState.timeoutId) {
+              clearTimeout(listenerState.timeoutId);
+              listenerState.timeoutId = null;
+            }
+            
+            if (snapshot.exists) {
               const data = { id: snapshot.id, ...snapshot.data() } as User;
-              console.log("[AuthStore] User data updated:", data.displayName ?? "no name");
+              console.log("[AuthStore] User data loaded:", data.displayName ?? "no name");
               useAuthStore.setState({ 
                 userData: data, 
                 isLoading: false, 
                 isInitialized: true 
               });
             } else {
-              console.log("[AuthStore] User document not found");
+              // Document n'existe pas - peut arriver si le compte a été créé
+              // mais le document Firestore n'a pas encore été créé
+              console.warn("[AuthStore] User document not found for:", user.uid);
               useAuthStore.setState({ 
                 userData: null, 
                 isLoading: false, 
@@ -125,7 +158,16 @@ export const initializeAuthListeners = (): (() => void) => {
             }
           },
           (error) => {
+            // Clear timeout
+            if (listenerState.timeoutId) {
+              clearTimeout(listenerState.timeoutId);
+              listenerState.timeoutId = null;
+            }
+            
             console.error("[AuthStore] User data listener error:", error);
+            console.error("[AuthStore] Error code:", error.code);
+            
+            // Continuer même en cas d'erreur pour ne pas bloquer l'app
             useAuthStore.setState({ 
               userData: null, 
               isLoading: false, 
@@ -134,7 +176,9 @@ export const initializeAuthListeners = (): (() => void) => {
           }
         );
     } else {
-      // Utilisateur déconnecté
+      // =====================================================
+      // UTILISATEUR DÉCONNECTÉ
+      // =====================================================
       console.log("[AuthStore] User logged out");
       useAuthStore.setState({
         firebaseUser: null,
@@ -159,12 +203,17 @@ export const initializeAuthListeners = (): (() => void) => {
       listenerState.userDataUnsubscribe = null;
     }
     
+    if (listenerState.timeoutId) {
+      clearTimeout(listenerState.timeoutId);
+      listenerState.timeoutId = null;
+    }
+    
     listenerState.isInitialized = false;
   };
 };
 
 // ============================================================
-// SELECTORS (pour éviter les re-renders inutiles)
+// SELECTORS
 // ============================================================
 
 export const selectFirebaseUser = (state: AuthState) => state.firebaseUser;
