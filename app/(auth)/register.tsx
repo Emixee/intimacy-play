@@ -3,6 +3,7 @@
  *
  * Version avec TextInput pour la date de naissance
  * Format JJ/MM/AAAA avec auto-formatage
+ * Liens cliquables vers CGU et Politique de confidentialité
  */
 
 import React, { useState, useCallback } from "react";
@@ -290,6 +291,18 @@ export default function RegisterScreen() {
     }
   }, [errors]);
 
+  // Navigation vers les pages légales
+  // Routes typées explicitement pour éviter les erreurs TypeScript
+  const navigateToTerms = useCallback(() => {
+    const route: any = "/(auth)/terms-of-use";
+    router.push(route);
+  }, []);
+
+  const navigateToPrivacy = useCallback(() => {
+    const route: any = "/(auth)/privacy-policy";
+    router.push(route);
+  }, []);
+
   const isButtonDisabled = isSubmitting || isLoading;
 
   return (
@@ -428,27 +441,54 @@ export default function RegisterScreen() {
               hint={`Vous devez avoir au moins ${MIN_AGE} ans`}
             />
 
-            {/* CGU */}
-            <TouchableOpacity
-              onPress={handleTermsToggle}
-              disabled={isButtonDisabled}
-              className="flex-row items-start mb-6 mt-4"
-            >
-              <View className={`w-6 h-6 rounded-md border-2 items-center justify-center mr-3 mt-0.5 ${
-                termsAccepted
-                  ? "bg-pink-500 border-pink-500"
-                  : errors.terms
-                  ? "border-red-500"
-                  : "border-gray-300"
-              }`}>
-                {termsAccepted && <Ionicons name="checkmark" size={16} color="white" />}
+            {/* CGU avec liens cliquables */}
+            <View className="mb-6 mt-4">
+              <TouchableOpacity
+                onPress={handleTermsToggle}
+                disabled={isButtonDisabled}
+                className="flex-row items-start"
+                activeOpacity={0.7}
+              >
+                <View className={`w-6 h-6 rounded-md border-2 items-center justify-center mr-3 mt-0.5 ${
+                  termsAccepted
+                    ? "bg-pink-500 border-pink-500"
+                    : errors.terms
+                    ? "border-red-500"
+                    : "border-gray-300"
+                }`}>
+                  {termsAccepted && <Ionicons name="checkmark" size={16} color="white" />}
+                </View>
+                <View className="flex-1">
+                  <Text className="text-gray-600 text-sm">
+                    J'accepte les{" "}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              
+              {/* Liens vers les documents légaux */}
+              <View className="flex-row flex-wrap ml-9 -mt-1">
+                <TouchableOpacity
+                  onPress={navigateToTerms}
+                  disabled={isButtonDisabled}
+                  hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
+                >
+                  <Text className="text-pink-500 font-medium text-sm underline">
+                    Conditions Générales d'Utilisation
+                  </Text>
+                </TouchableOpacity>
+                <Text className="text-gray-600 text-sm"> et la </Text>
+                <TouchableOpacity
+                  onPress={navigateToPrivacy}
+                  disabled={isButtonDisabled}
+                  hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
+                >
+                  <Text className="text-pink-500 font-medium text-sm underline">
+                    Politique de Confidentialité
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <Text className="flex-1 text-gray-600 text-sm">
-                J'accepte les{" "}
-                <Text className="text-pink-500 font-medium">CGU</Text> et la{" "}
-                <Text className="text-pink-500 font-medium">Politique de Confidentialité</Text>
-              </Text>
-            </TouchableOpacity>
+            </View>
+
             {errors.terms && (
               <View className="flex-row items-center -mt-4 mb-4 ml-1">
                 <Ionicons name="alert-circle" size={14} color="#EF4444" />

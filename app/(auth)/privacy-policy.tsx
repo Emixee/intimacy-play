@@ -1,7 +1,7 @@
 /**
- * Écran Conditions Générales d'Utilisation (CGU)
+ * Écran Politique de Confidentialité
  *
- * Affiche les CGU de l'application
+ * Affiche la politique de confidentialité de l'application
  * Accessible depuis l'écran d'inscription
  */
 
@@ -17,7 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import {
-  TERMS_OF_USE,
+  PRIVACY_POLICY,
   COMPANY_INFO,
   LEGAL_CONFIG,
   LegalSection,
@@ -44,11 +44,6 @@ const Section: React.FC<SectionProps> = ({ section }) => {
         const isBullet = paragraph.startsWith("•");
         // Détection des lignes vides (pour l'espacement)
         const isEmpty = paragraph.trim() === "";
-        // Détection des titres de sous-section
-        const isSubTitle =
-          paragraph.endsWith(":") &&
-          !paragraph.startsWith("•") &&
-          paragraph.length < 50;
 
         if (isEmpty) {
           return <View key={index} className="h-2" />;
@@ -62,17 +57,6 @@ const Section: React.FC<SectionProps> = ({ section }) => {
             >
               <Text className="text-amber-800 font-medium">{paragraph}</Text>
             </View>
-          );
-        }
-
-        if (isSubTitle) {
-          return (
-            <Text
-              key={index}
-              className="text-gray-700 font-semibold mt-2 mb-1"
-            >
-              {paragraph}
-            </Text>
           );
         }
 
@@ -95,7 +79,7 @@ const Section: React.FC<SectionProps> = ({ section }) => {
 // COMPOSANT PRINCIPAL
 // ============================================================
 
-export default function TermsOfUseScreen() {
+export default function PrivacyPolicyScreen() {
   return (
     <SafeAreaView className="flex-1 bg-pink-50">
       <StatusBar style="dark" />
@@ -110,7 +94,7 @@ export default function TermsOfUseScreen() {
           <Ionicons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
         <Text className="flex-1 text-xl font-bold text-gray-800 ml-2">
-          Conditions Générales d'Utilisation
+          Politique de Confidentialité
         </Text>
       </View>
 
@@ -122,9 +106,9 @@ export default function TermsOfUseScreen() {
         {/* En-tête du document */}
         <View className="bg-white rounded-2xl p-5 mb-6 shadow-sm">
           <View className="items-center mb-4">
-            <Text className="text-4xl mb-2">📜</Text>
+            <Text className="text-4xl mb-2">🔒</Text>
             <Text className="text-2xl font-bold text-pink-500 text-center">
-              Conditions Générales d'Utilisation
+              Politique de Confidentialité
             </Text>
           </View>
 
@@ -149,29 +133,26 @@ export default function TermsOfUseScreen() {
           <View className="flex-row items-center mb-2">
             <Ionicons name="warning" size={24} color="#DC2626" />
             <Text className="text-red-700 font-bold ml-2 text-lg">
-              Application réservée aux adultes
+              Application 18+
             </Text>
           </View>
-          <Text className="text-red-600 mb-2">
-            Cette application est exclusivement réservée aux personnes majeures
-            ({LEGAL_CONFIG.minAge} ans et plus).
-          </Text>
           <Text className="text-red-600">
-            L'éditeur décline toute responsabilité quant à l'utilisation des
-            contenus partagés entre utilisateurs.
+            Cette application contient du contenu à caractère adulte et érotique.
+            En l'utilisant, vous confirmez avoir au moins {LEGAL_CONFIG.minAge} ans.
           </Text>
         </View>
 
-        {/* Sections des CGU */}
+        {/* Sections de la politique */}
         <View className="bg-white rounded-2xl p-5 shadow-sm">
-          {TERMS_OF_USE.map((section) => (
+          {PRIVACY_POLICY.map((section) => (
             <Section key={section.id} section={section} />
           ))}
 
           {/* Pied de document */}
           <View className="border-t border-gray-200 pt-4 mt-4">
             <Text className="text-gray-500 text-sm text-center italic">
-              Document rédigé conformément au droit français et européen
+              Document rédigé conformément au RGPD (Règlement UE 2016/679)
+              et à la loi Informatique et Libertés
             </Text>
           </View>
         </View>
