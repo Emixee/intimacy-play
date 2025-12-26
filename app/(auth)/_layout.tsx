@@ -14,11 +14,11 @@
 
 import React, { useEffect } from "react";
 import { Stack, router } from "expo-router";
-import { useAuthStore } from "../../stores/authStore";
+import { useAuthStore, selectIsAuthenticated } from "../../stores/authStore";
 
 export default function AuthLayout() {
-  // Vérifier si l'utilisateur est connecté
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  // Vérifier si l'utilisateur est connecté (via selector)
+  const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const isInitialized = useAuthStore((state) => state.isInitialized);
 
   // Rediriger vers main si déjà connecté
