@@ -1,15 +1,10 @@
 /**
  * Écran de jeu principal - VERSION OPTIMISÉE PRODUCTION
  *
- * PROMPT SCREEN-PROTECTION : Ajout protection captures d'écran
- *
  * Refactorisé pour :
  * - Composants extraits vers components/game/
  * - Meilleure performance avec React.memo et useMemo
  * - Code plus léger (~300 lignes vs 1500)
- * - Protection contre les captures d'écran (Android)
- * 
- * PROMPT 10.2 : Ajout isPremium au ChatZone pour médias
  */
 
 import React, { useState, useCallback, useMemo, useEffect } from "react";
@@ -40,7 +35,6 @@ import { CreatePartnerChallengeModal } from "../../components/modals";
 // Hooks
 import { useSession } from "../../hooks/useSession";
 import { useAuth } from "../../hooks/useAuth";
-import { useScreenProtection } from "../../hooks/useScreenProtection";
 
 // Services
 import { gameService } from "../../services/game.service";
@@ -209,19 +203,6 @@ const ChallengeCardDisplay = React.memo<ChallengeCardDisplayProps>(({
 export default function GameScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const { userData, isPremium } = useAuth();
-
-  // 🔒 PROTECTION CONTRE LES CAPTURES D'ÉCRAN
-  // Bloque sur Android, affiche une alerte sur iOS
-  useScreenProtection({
-    showAlertOnCapture: true,
-    captureAlertTitle: "⚠️ Capture détectée",
-    captureAlertMessage:
-      "Par respect pour votre partenaire, les captures d'écran sont déconseillées. Le contenu partagé est éphémère et privé.",
-    onScreenshotDetected: () => {
-      // Log pour analytics (optionnel)
-      console.log("[GameScreen] Screenshot detected!");
-    },
-  });
 
   const {
     session,
@@ -474,7 +455,6 @@ export default function GameScreen() {
           expanded={chatExpanded}
           onToggle={() => setChatExpanded(!chatExpanded)}
           unreadCount={unreadCount}
-          isPremium={isPremium}
         />
       )}
 

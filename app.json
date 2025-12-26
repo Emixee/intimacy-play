@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Couple Challenge",
+    "name": "Intimacy Play",
     "slug": "intimacy-play",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "couplechallenge",
+    "scheme": "intimacyplay",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -22,7 +22,6 @@
         "backgroundColor": "#FFF5F7"
       },
       "package": "com.intimacyplay.app",
-      "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.INTERNET",
@@ -62,7 +61,7 @@
       [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": "ca-app-pub-4902274309112105~6479064195"
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713"
         }
       ]
     ],
