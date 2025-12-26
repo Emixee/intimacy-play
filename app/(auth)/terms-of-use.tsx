@@ -2,7 +2,7 @@
  * Écran Conditions Générales d'Utilisation (CGU)
  *
  * Affiche les CGU de l'application
- * Accessible depuis l'écran d'inscription
+ * Accessible depuis l'écran d'inscription via le lien "CGU"
  */
 
 import React from "react";
