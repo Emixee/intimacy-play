@@ -238,7 +238,16 @@ export default function GameScreen() {
   const [showCreateChallengeModal, setShowCreateChallengeModal] = useState(false);
   const [isRequestingPartner, setIsRequestingPartner] = useState(false);
 
-  const partnerName = useMemo(() => "ton/ta partenaire", []);
+  // ✅ CORRECTION : Récupérer le nom du partenaire depuis les préférences
+  const partnerName = useMemo(() => {
+    // Si l'utilisateur a défini un petit nom pour son partenaire, l'utiliser
+    if (userData?.partnerNickname && userData.partnerNickname.trim().length > 0) {
+      return userData.partnerNickname.trim();
+    }
+    // Sinon, fallback sur la valeur par défaut
+    return "ton/ta partenaire";
+  }, [userData?.partnerNickname]);
+
   const currentLevel = currentChallenge?.level || 1;
   const usedChallengeTexts = useMemo(() => session?.challenges.map((c) => c.text) || [], [session]);
   const bonusUsed = useMemo(() => {
