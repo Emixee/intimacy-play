@@ -5,6 +5,7 @@
  * PROMPT 1.3-v2 : Mise à jour des thèmes basés sur defis_couple_distance_v4.xlsx
  * PROMPT PARTNER-CHALLENGE : Ajout UserChallenge pour stockage modération
  * PROMPT MEDIA-FIX : Réduction durée média à 2 minutes + nouveaux types viewer
+ * PROMPT PARTNER-NAME : Ajout partnerNickname dans User
  * 
  * Aligné avec le code existant ET FIRESTORE-SCHEMA.md
  * Compatible avec services/session.service.ts, services/game.service.ts, etc.
@@ -279,6 +280,13 @@ export interface User {
 
   // Préférences
   preferences: UserPreferences;
+
+  /** 
+   * Petit nom du partenaire (Premium)
+   * Utilisé dans le bandeau de tour et les messages personnalisés
+   * Ex: "Mon amour", "Chéri(e)", "Bébé"
+   */
+  partnerNickname?: string;
 
   // Timestamps
   createdAt: Timestamp;
