@@ -2,9 +2,7 @@
  * MediaViewer - Visualisation plein écran des médias
  * 
  * FIX CRASH : Gestion robuste de expiresAt null
- * - Try-catch sur expiresAt.toDate()
- * - Vérification que expiresAt est un Timestamp valide
- * - Fonction helper safeToDate réutilisable
+ * AJOUT : Protection anti-capture d'écran via useScreenProtection
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
@@ -27,6 +25,7 @@ import * as Haptics from "expo-haptics";
 import { differenceInSeconds } from "date-fns";
 import type { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
 import type { MessageType } from "../../types";
+import { useScreenProtection } from "../../hooks/useScreenProtection"; // ⭐ AJOUT
 
 // ============================================================
 // TYPES
@@ -99,6 +98,14 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({
   onClose,
   onDownload,
 }) => {
+  // ⭐ PROTECTION ANTI-SCREENSHOT
+  useScreenProtection({
+    disabled: !visible, // Active uniquement quand le viewer est ouvert
+    showAlertOnCapture: true,
+    captureAlertTitle: "⚠️ Capture détectée",
+    captureAlertMessage: "Par respect pour votre partenaire, les captures d'écran sont déconseillées. Le contenu est éphémère et privé.",
+  });
+
   // État général
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
